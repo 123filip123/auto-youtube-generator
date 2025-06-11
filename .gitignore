@@ -195,3 +195,8 @@ cython_debug/
 
 # misc
 .env
+
+# output
+audio_output/
+image_output/
+json_output/
