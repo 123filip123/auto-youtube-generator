@@ -1,5 +1,7 @@
 import json
-from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips, concatenate_audioclips
+from moviepy.editor import ImageClip, AudioFileClip, concatenate_videoclips, concatenate_audioclips, ColorClip, TextClip, CompositeVideoClip
+from PIL import Image
+import numpy as np
 import os
 
 from generate_audio import AUDIO_OUTPUT_DIR
@@ -14,6 +16,7 @@ def generate_video():
     Each item will:
     - Start with a 0.2 second delay before audio begins
     - Have a 0.5 second delay after audio ends before next item
+    - Display on a white background with title text below
     """
 
     json_path = f"{LIST_OUTPUT_DIR}/list_items.json"
@@ -35,8 +38,15 @@ def generate_video():
         image_file = os.path.join(image_dir, f"item_{item_number}.png")
         audio_file = os.path.join(audio_dir, f"item_{item_number}.mp3")
         
-        # Create image clip
-        image_clip = ImageClip(image_file)
+        # Load and resize image using PIL first
+        pil_image = Image.open(image_file)
+        # Calculate new width while maintaining aspect ratio
+        aspect_ratio = pil_image.width / pil_image.height
+        new_width = int(720 * aspect_ratio)
+        pil_image = pil_image.resize((new_width, 720), Image.Resampling.LANCZOS)
+        
+        # Convert PIL Image to numpy array
+        image_array = np.array(pil_image)
         
         # Load audio clip
         audio_clip = AudioFileClip(audio_file)
@@ -44,8 +54,38 @@ def generate_video():
         # Calculate total duration including delays
         total_duration = 0.2 + audio_clip.duration + 0.5
         
-        # Set the duration of the image clip to match total duration
-        image_clip = image_clip.set_duration(total_duration)
+        # Create image clip from numpy array and set duration
+        image_clip = ImageClip(image_array).set_duration(total_duration)
+        
+        # Create a white background clip
+        bg_clip = ColorClip(size=(1920, 1080), color=(255, 255, 255))
+        bg_clip = bg_clip.set_duration(total_duration)
+        
+        # Create title text clip
+        title_clip = TextClip(
+            item['title'],
+            fontsize=60,
+            color='black',
+            font='Arial-Bold',
+            size=(new_width, None),
+            method='caption'
+        )
+        title_clip = title_clip.set_duration(total_duration)
+        
+        # Position the image in the upper center, leaving space for the text below
+        image_y = (1080 - 720 - 60) // 2  # 60px gap for text
+        image_clip = image_clip.set_position(("center", image_y))
+        
+        # Position the title further below the image
+        text_y = image_y + 720 + 60  # 60px gap below image
+        title_clip = title_clip.set_position(("center", text_y))
+        
+        # Composite all elements
+        video_clip = CompositeVideoClip([
+            bg_clip,
+            image_clip,
+            title_clip
+        ])
         
         # Create a silent audio clip for the initial delay
         initial_delay = AudioFileClip(audio_file).set_duration(0.2).volumex(0)
@@ -56,8 +96,8 @@ def generate_video():
         # Concatenate the audio clips with delays
         combined_audio = concatenate_audioclips([initial_delay, audio_clip, final_delay])
         
-        # Set the audio of the image clip
-        video_clip = image_clip.set_audio(combined_audio)
+        # Set the audio of the video clip
+        video_clip = video_clip.set_audio(combined_audio)
         
         # Add to the list of clips
         video_clips.append(video_clip)
