@@ -15,29 +15,33 @@ def generate_audio_for_item(i:int, item: Dict):
         i (int): Index of the item
         item (Dict): Dictionary containing title and description
     """
-    # Combine title and description with a pause
-    text = f"{item['title']}. {item['description']}"
+    try:
+        # Combine title and description with a pause
+        text = f"{item['title']}. {item['description']}"
 
-    client = get_open_ai_client()
-            
-    # Generate audio using OpenAI's TTS API
-    response = client.audio.speech.create(
-        model="tts-1",
-        voice="ash",
-        instructions="Speak in a engaging tone that would be informative and interesting for a youtube video. Use a professional, conversational style.",
-        input=text
-    )
-            
-    # Generate filename
-    filename = f"item_{i:02d}.mp3"
-    filepath = os.path.join(AUDIO_OUTPUT_DIR, filename)
-            
-    # Save the audio file using streaming response
-    with open(filepath, 'wb') as f:
-        for chunk in response.iter_bytes():
-            f.write(chunk)
+        client = get_open_ai_client()
+                
+        # Generate audio using OpenAI's TTS API
+        response = client.audio.speech.create(
+            model="tts-1",
+            voice="ash",
+            instructions="Speak in a engaging tone that would be informative and interesting for a youtube video. Use a professional, conversational style.",
+            input=text
+        )
+                
+        # Generate filename
+        filename = f"item_{i:02d}.mp3"
+        filepath = os.path.join(AUDIO_OUTPUT_DIR, filename)
+                
+        # Save the audio file using streaming response
+        with open(filepath, 'wb') as f:
+            for chunk in response.iter_bytes():
+                f.write(chunk)
 
-    print(f"Generated audio for item {i}: {item['title']}")
+        print(f"Generated audio for item {i}: {item['title']}")
+    except Exception as e:
+        print(f"Error generating audio for item {i}: {str(e)}")
+        raise  # Re-raise the exception to be handled by the caller
 
 
 def generate_audio_for_items(items_json: str):

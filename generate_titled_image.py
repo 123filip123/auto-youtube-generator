@@ -15,46 +15,50 @@ def generate_titled_image(image_path: str, title: str, output_filename: str):
         title (str): Title text to add below the image
         output_filename (str): Name of the output file (without extension)
     """
-    # Create output directory if it doesn't exist
-    Path(TITLED_IMAGE_OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
-    
-    # Load and resize image
-    pil_image = Image.open(image_path)
-    aspect_ratio = pil_image.width / pil_image.height
-    new_width = int(720 * aspect_ratio)
-    pil_image = pil_image.resize((new_width, 720), Image.Resampling.LANCZOS)
-    
-    # Create a white background
-    bg_width = 1920
-    bg_height = 1080
-    background = Image.new('RGB', (bg_width, bg_height), (255, 255, 255))
-    
-    # Calculate positions
-    image_y = (bg_height - 720 - 60) // 2  # 60px gap for text
-    image_x = (bg_width - new_width) // 2
-    
-    # Paste the image onto the background
-    background.paste(pil_image, (image_x, image_y))
-    
-    # Add title text
-    draw = ImageDraw.Draw(background)
     try:
-        font = ImageFont.truetype("Arial Bold", 60)
-    except IOError:
-        # Fallback to default font if Arial Bold is not available
-        font = ImageFont.load_default()
-    
-    # Calculate text position
-    text_y = image_y + 720 + 60  # 60px gap below image
-    
-    # Draw text
-    draw.text((bg_width//2, text_y), title, fill='black', font=font, anchor="mm")
-    
-    # Save the final image
-    output_path = os.path.join(TITLED_IMAGE_OUTPUT_DIR, f"{output_filename}.png")
-    background.save(output_path)
-    
-    return output_path
+        # Create output directory if it doesn't exist
+        Path(TITLED_IMAGE_OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+        
+        # Load and resize image
+        pil_image = Image.open(image_path)
+        aspect_ratio = pil_image.width / pil_image.height
+        new_width = int(720 * aspect_ratio)
+        pil_image = pil_image.resize((new_width, 720), Image.Resampling.LANCZOS)
+        
+        # Create a white background
+        bg_width = 1920
+        bg_height = 1080
+        background = Image.new('RGB', (bg_width, bg_height), (255, 255, 255))
+        
+        # Calculate positions
+        image_y = (bg_height - 720 - 60) // 2  # 60px gap for text
+        image_x = (bg_width - new_width) // 2
+        
+        # Paste the image onto the background
+        background.paste(pil_image, (image_x, image_y))
+        
+        # Add title text
+        draw = ImageDraw.Draw(background)
+        try:
+            font = ImageFont.truetype("Arial Bold", 60)
+        except IOError:
+            # Fallback to default font if Arial Bold is not available
+            font = ImageFont.load_default()
+        
+        # Calculate text position
+        text_y = image_y + 720 + 60  # 60px gap below image
+        
+        # Draw text
+        draw.text((bg_width//2, text_y), title, fill='black', font=font, anchor="mm")
+        
+        # Save the final image
+        output_path = os.path.join(TITLED_IMAGE_OUTPUT_DIR, f"{output_filename}.png")
+        background.save(output_path)
+        
+        return output_path
+    except Exception as e:
+        print(f"Error generating titled image for '{title}' from '{image_path}': {str(e)}")
+        raise  # Re-raise the exception to be handled by the caller
 
 def generate_titled_images_for_items(items_json: str):
     """

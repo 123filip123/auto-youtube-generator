@@ -51,8 +51,8 @@ def generate_image(prompt: str, output_dir: str, filename: str) -> str:
         
         return image_path
     except Exception as e:
-        print(f"Error generating image: {str(e)}")
-        raise
+        print(f"Error generating image with prompt '{prompt}': {str(e)}")
+        raise  # Re-raise the exception to be handled by the caller
 
 def generate_images_for_items(items_json: str) -> list[str]:
     """
