@@ -58,6 +58,7 @@ def generate_image(prompt: str, output_dir: str, filename: str) -> str:
             prompt=prompt,
             size="1024x1024",
             n=1,
+            quality="medium"
         )
         
         image_bytes = base64.b64decode(response.data[0].b64_json)

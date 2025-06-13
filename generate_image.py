@@ -6,6 +6,7 @@ import time
 from typing import List
 from tenacity import retry, stop_after_attempt, wait_exponential
 
+from generate_list import LIST_OUTPUT_DIR
 from utils.helper_functions import clean_json_input
 from utils.open_ai_client import get_open_ai_client
 
@@ -44,6 +45,7 @@ def generate_image(prompt: str, output_dir: str, filename: str) -> str:
             prompt=prompt,
             size="1024x1024",
             n=1,
+            quality="medium"
         )
         
         image_bytes = base64.b64decode(response.data[0].b64_json)
@@ -96,7 +98,9 @@ def generate_images_for_items(items_json: str) -> List[str]:
 
 if __name__ == "__main__":
     # Example usage
-    items_json = input("Paste the JSON output from generate_list.py: ")
+    json_path = f"{LIST_OUTPUT_DIR}/list_items.json"
+    with open(json_path, 'r') as f:
+        items_json = f.read()
     try:
         image_paths = generate_images_for_items(items_json)
         print("\nGenerated Images:")
