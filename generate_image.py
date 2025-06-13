@@ -3,12 +3,15 @@ import os
 import json
 from pathlib import Path
 import time
+from typing import List
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from utils.helper_functions import clean_json_input
 from utils.open_ai_client import get_open_ai_client
 
 IMAGE_OUTPUT_DIR = "outputs/image_output"
-
+MAX_RETRIES = 3
+DELAY_BETWEEN_REQUESTS = 5  # seconds
 
 def create_image_prompt(title: str, description: str) -> str:
     """
@@ -18,9 +21,12 @@ def create_image_prompt(title: str, description: str) -> str:
     max_desc_length = 200
     if len(description) > max_desc_length:
         description = description[:max_desc_length] + "..."
-    
-    return f"Create a image illustrating: {title}. Style: realistic."
 
+    prompt = f"Create a image illustrating: {title}. Style: realistic."
+    
+    return prompt
+
+@retry(stop=stop_after_attempt(MAX_RETRIES), wait=wait_exponential(multiplier=1, min=4, max=10))
 def generate_image(prompt: str, output_dir: str, filename: str) -> str:
     """
     Generate an image using DALL-E and save it to the specified directory.
@@ -46,15 +52,13 @@ def generate_image(prompt: str, output_dir: str, filename: str) -> str:
         with open(image_path, "wb") as f:
             f.write(image_bytes)
         
-        # Add a small delay to avoid rate limiting
-        time.sleep(1)
         
         return image_path
     except Exception as e:
         print(f"Error generating image with prompt '{prompt}': {str(e)}")
-        raise  # Re-raise the exception to be handled by the caller
+        raise  # Re-raise the exception to be handled by the retry decorator
 
-def generate_images_for_items(items_json: str) -> list[str]:
+def generate_images_for_items(items_json: str) -> List[str]:
     """
     Generate images for each item in the JSON list.
     Returns a list of paths to the generated images.
@@ -80,8 +84,12 @@ def generate_images_for_items(items_json: str) -> list[str]:
             image_paths.append(image_path)
             print(f"Successfully generated image: {image_path}")
             
+            # Add delay between requests to avoid rate limiting
+            time.sleep(DELAY_BETWEEN_REQUESTS)
+            
         except Exception as e:
-            print(f"Failed to generate image for item {i}: {str(e)}")
+            print(f"Failed to generate image for item {i} after {MAX_RETRIES} attempts: {str(e)}")
+            print("Continuing with next item...")
             continue
     
     return image_paths
