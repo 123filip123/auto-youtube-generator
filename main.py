@@ -1,6 +1,7 @@
 from generate_list import generate_list
 from generate_audio import generate_audio_for_items
 from generate_image import generate_images_for_items
+from generate_titled_image import generate_titled_images_for_items
 from generate_video import generate_video
 
 
@@ -19,6 +20,10 @@ def main():
     # Then generate images for the items
     print("\nGenerating images for items...")
     generate_images_for_items(items_json)
+
+    # Then generate titled images for the items
+    print("\nGenerating titled images for items...")
+    generate_titled_images_for_items(items_json)
 
     # Then generate video for the items
     print("\nGenerating video for items...")

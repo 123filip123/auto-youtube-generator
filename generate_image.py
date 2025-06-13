@@ -1,3 +1,4 @@
+import base64
 import os
 import json
 from pathlib import Path
@@ -18,7 +19,7 @@ def create_image_prompt(title: str, description: str) -> str:
     if len(description) > max_desc_length:
         description = description[:max_desc_length] + "..."
     
-    return f"Create a professional, high-quality image illustrating: {title}. The image should be visually striking, suitable for a YouTube video and most importantly, it should be a real photo of the subject. Style: cartoonish,modern, clean, and engaging."
+    return f"Create a image illustrating: {title}. Style: realistic."
 
 def generate_image(prompt: str, output_dir: str, filename: str) -> str:
     """
@@ -33,22 +34,17 @@ def generate_image(prompt: str, output_dir: str, filename: str) -> str:
 
         # Generate the image
         response = client.images.generate(
-            model="dall-e-3",
+            model="gpt-image-1",
             prompt=prompt,
             size="1024x1024",
-            quality="standard",
             n=1,
         )
         
-        # Get the image URL
-        image_url = response.data[0].url
-        
-        # Download and save the image
-        import requests
+        image_bytes = base64.b64decode(response.data[0].b64_json)
+
         image_path = os.path.join(output_dir, f"{filename}.png")
-        response = requests.get(image_url)
         with open(image_path, "wb") as f:
-            f.write(response.content)
+            f.write(image_bytes)
         
         # Add a small delay to avoid rate limiting
         time.sleep(1)
