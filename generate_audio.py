@@ -1,13 +1,17 @@
 import json
 import os
-from typing import  Dict
+import time
+from typing import Dict
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from utils.open_ai_client import get_open_ai_client
 
 AUDIO_OUTPUT_DIR = "outputs/audio_output"
+MAX_RETRIES = 3
+DELAY_BETWEEN_REQUESTS = 5  # seconds
 
-
-def generate_audio_for_item(i:int, item: Dict):
+@retry(stop=stop_after_attempt(MAX_RETRIES), wait=wait_exponential(multiplier=1, min=4, max=10))
+def generate_audio_for_item(i: int, item: Dict):
     """
     Generate audio for a single item using OpenAI's Text-to-Speech API.
     
@@ -39,10 +43,10 @@ def generate_audio_for_item(i:int, item: Dict):
                 f.write(chunk)
 
         print(f"Generated audio for item {i}: {item['title']}")
+        return True
     except Exception as e:
         print(f"Error generating audio for item {i}: {str(e)}")
-        raise  # Re-raise the exception to be handled by the caller
-
+        raise  # Re-raise the exception to be handled by the retry decorator
 
 def generate_audio_for_items(items_json: str):
     """
@@ -60,7 +64,14 @@ def generate_audio_for_items(items_json: str):
         items = json.loads(items_json)
                 
         for i, item in enumerate(items, 1):
-            generate_audio_for_item(i, item)
+            try:
+                generate_audio_for_item(i, item)
+                # Add a small delay between requests to avoid rate limiting
+                time.sleep(DELAY_BETWEEN_REQUESTS)
+            except Exception as e:
+                print(f"Failed to generate audio for item {i} after {MAX_RETRIES} attempts: {str(e)}")
+                print("Continuing with next item...")
+                continue
     except Exception as e:
         print(f"Error processing items_json: {e}")
         

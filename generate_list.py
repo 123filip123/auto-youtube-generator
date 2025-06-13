@@ -6,7 +6,7 @@ LIST_OUTPUT_DIR = "outputs/json_output"
 
 
 def generate_list(prompt_topic: str):
-    num_items: int = 3
+    num_items: int = 10
     system_msg = "You are a helpful assistant that generates a list of interesting facts, places, or concepts."
     user_msg = (
         f"Give me a list of {num_items} items for a YouTube video on the topic: '{prompt_topic}'. "
