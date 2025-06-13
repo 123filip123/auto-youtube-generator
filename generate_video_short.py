@@ -18,6 +18,7 @@ def generate_video_short():
     - Have a 0.5 second delay after audio ends before next item
     - Display on a white background with title text below
     - Maintain 9:16 aspect ratio (1080x1920) for YouTube Shorts
+    - Include a smooth zoom effect on the images
     """
 
     json_path = f"{LIST_OUTPUT_DIR}/list_items.json"
@@ -57,6 +58,25 @@ def generate_video_short():
         # Create a white background clip (1080x1920 for vertical video)
         bg_clip = ColorClip(size=(1080, 1920), color=(255, 255, 255))
         bg_clip = bg_clip.set_duration(total_duration)
+        
+        # Add zoom effect using resize
+        def zoom_effect(t):
+            # Start at 1.0 and zoom to 1.2 over the duration
+            zoom_factor = 1.0 + (0.2 * t / total_duration)
+            return zoom_factor
+        
+        # Apply the zoom effect using the newer PIL resampling method
+        def resize_with_zoom(get_frame, t):
+            frame = get_frame(t)
+            zoom = zoom_effect(t)
+            h, w = frame.shape[:2]
+            new_h, new_w = int(h * zoom), int(w * zoom)
+            pil_image = Image.fromarray(frame)
+            resized = pil_image.resize((new_w, new_h), Image.Resampling.LANCZOS)
+            return np.array(resized)
+        
+        # Apply the resize effect
+        image_clip = image_clip.fl(lambda gf, t: resize_with_zoom(gf, t))
         
         # Position the image in the center
         image_clip = image_clip.set_position("center")
