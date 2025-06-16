@@ -2,7 +2,7 @@ from utils.helper_functions import clean_json_input
 from utils.open_ai_client import get_open_ai_client
 import os
 
-from utils.output_dirs import JSON_OUTPUT_DIR, LIST_OUTPUT_DIR
+from utils.output_dirs import JSON_OUTPUT_DIR
 
 
 
