@@ -1,0 +1,5 @@
+AUDIO_OUTPUT_DIR = "outputs/audio_output"
+IMAGE_OUTPUT_DIR = "outputs/image_output"
+JSON_OUTPUT_DIR = "outputs/json_output"
+TITLED_IMAGE_OUTPUT_DIR = "outputs/titled_image_output"
+VIDEO_OUTPUT_DIR = "outputs/video_output"
