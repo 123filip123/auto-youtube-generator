@@ -58,7 +58,7 @@ def generate_image(prompt: str, output_dir: str, filename: str) -> str:
             prompt=prompt,
             size="1024x1024",
             n=1,
-            quality="medium"
+            quality="low"
         )
         
         image_bytes = base64.b64decode(response.data[0].b64_json)
@@ -75,7 +75,7 @@ def generate_image(prompt: str, output_dir: str, filename: str) -> str:
 def generate_images_for_items_v2(items_json: str) -> List[str]:
     """
     Generate images for each item in the JSON list.
-    First generates one image for the full description, then generates images for each sentence.
+    Generates images for each prompt in the image_prompts array.
     Returns a list of paths to the generated images.
     """
     # Clean and parse the JSON string into a list of items
@@ -87,32 +87,13 @@ def generate_images_for_items_v2(items_json: str) -> List[str]:
         try:
             print(f"\nProcessing item {i}: {item['title']}")
             
-            # First, generate one image for the full description
-            print("\nGenerating full description image:")
-            full_prompt = create_image_prompt(item['title'], item['description'], is_full_description=True)
-            print(f"Using prompt: {full_prompt}")
-            
-            full_filename = f"item_{i:02d}_full"
-            full_image_path = generate_image(full_prompt, IMAGE_OUTPUT_DIR, full_filename)
-            image_paths.append(full_image_path)
-            print(f"Successfully generated full description image: {full_image_path}")
-            
-            # Add delay between requests
-            time.sleep(DELAY_BETWEEN_REQUESTS)
-            
-            # Then, generate images for each sentence
-            sentences = split_into_sentences(item['description'])
-            print(f"\nFound {len(sentences)} sentences in description")
-            
-            for j, sentence in enumerate(sentences, start=1):
-                # Create a prompt for this sentence
-                prompt = create_image_prompt(item['title'], sentence)
-                
-                # Generate a filename based on the item and sentence index
-                filename = f"item_{i:02d}_sentence_{j:02d}"
-                
-                print(f"\nGenerating image for sentence {j}:")
+            # Generate images for each prompt in the image_prompts array
+            for j, prompt in enumerate(item['image_prompts'], start=1):
+                print(f"\nGenerating image for prompt {j}:")
                 print(f"Using prompt: {prompt}")
+                
+                # Generate a filename based on the item and prompt index
+                filename = f"item_{i:02d}_prompt_{j:02d}"
                 
                 # Generate and save the image
                 image_path = generate_image(prompt, IMAGE_OUTPUT_DIR, filename)
@@ -130,13 +111,11 @@ def generate_images_for_items_v2(items_json: str) -> List[str]:
     return image_paths
 
 if __name__ == "__main__":
-    # Example usage with predefined JSON
-    items_json = '''[
-  {
-    "title": "Venus Flytrap",
-    "description": "This carnivorous plant snaps shut on unsuspecting insects that wander into its trap-like leaves. Its ability to count touches before closing makes it a cunning predator of the plant world."
-  }
-]'''
+    # Read the JSON file from the output directory
+    json_path = f"outputs/json_output/list_items_with_prompts.json"
+    with open(json_path, 'r') as f:
+        items_json = f.read()
+    
     try:
         image_paths = generate_images_for_items_v2(items_json)
         print("\nGenerated Images:")
