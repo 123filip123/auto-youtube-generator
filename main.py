@@ -15,7 +15,7 @@ def main():
     
     # First generate the list of items
     print("\nGenerating list of items...")
-    items_json = generate_list(topic, num_items)
+    items_json = generate_list(topic, int(num_items))
     
     # Then generate audio for the items
     print("\nGenerating audio for items...")

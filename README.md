@@ -31,8 +31,17 @@ This project automatically generates YouTube Shorts-style videos based on a topi
    source venv/bin/activate
    ```
 
-3. **Install dependencies:**
+   For Windows (also make sure you have Python set up in Path):
+
    ```bash
+   python -m venv venv
+   .\venv\Scripts\Activate
+   ```
+
+3. **Install dependencies:**
+
+   ```bash
+   pip install --upgrade setuptools wheel (do this for windows if you have issues)
    pip install -r requirements.txt
    ```
 
