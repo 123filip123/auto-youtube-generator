@@ -74,35 +74,6 @@ This will prompt you for a topic and number of items, then run the entire proces
 python main.py
 ```
 
-### Run Individual Steps
-
-You can also run each step separately using the provided scripts:
-
-- **Generate list:**
-  ```bash
-  python run_generate_list.py
-  ```
-- **Generate audio:**
-  ```bash
-  python run_generate_audio.py
-  ```
-- **Generate images:**
-  ```bash
-  python run_generate_images.py
-  ```
-- **Create titled images:**
-  ```bash
-  python run_create_titled_images_short.py
-  ```
-- **Save generated data:**
-  ```bash
-  python run_save_to_generated_data.py
-  ```
-- **Generate video:**
-  ```bash
-  python run_generate_video_short.py
-  ```
-
 ---
 
 ## Output
