@@ -20,7 +20,7 @@ This project automatically generates YouTube Shorts-style videos based on a topi
 1. **Clone the repository:**
 
    ```bash
-   git clone <repo-url>
+   git clone https://github.com/123filip123/auto-youtube-generator.git
    cd auto-youtube-generator
    ```
 
