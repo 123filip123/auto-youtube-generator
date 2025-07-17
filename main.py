@@ -10,10 +10,12 @@ from utils.output_file_names import get_list_items_path
 def main():
     # Get the topic from user input
     topic = input("Enter a topic for your video: ")
+
+    num_items = input("Enter the number of items for your video: ")
     
     # First generate the list of items
     print("\nGenerating list of items...")
-    items_json = generate_list(topic)
+    items_json = generate_list(topic, num_items)
     
     # Then generate audio for the items
     print("\nGenerating audio for items...")

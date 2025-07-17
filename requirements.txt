@@ -1,2 +1,4 @@
 openai>=1.0.0
 tenacity>=8.2.0 
+moviepy>=1.0.0
+pillow>=9.0.0 

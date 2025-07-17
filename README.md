@@ -1,0 +1,118 @@
+# Auto YouTube Generator
+
+## Overview
+
+This project automatically generates YouTube Shorts-style videos based on a topic you provide. It uses OpenAI APIs to generate a list of items, create images and audio, and then assembles them into a vertical video suitable for YouTube Shorts.
+
+**Pipeline steps:**
+
+1. Generate a list of items (with titles, descriptions, and image prompts) for your topic.
+2. Generate audio narration for each item using OpenAI's TTS API.
+3. Generate images for each item using OpenAI's image generation API.
+4. Save all generated data.
+5. Create titled images for each item.
+6. Assemble everything into a vertical video (9:16) with smooth transitions and effects.
+
+---
+
+## Installation
+
+1. **Clone the repository:**
+
+   ```bash
+   git clone <repo-url>
+   cd auto-youtube-generator
+   ```
+
+2. **Create a virtual environment (optional but recommended):**
+
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+
+3. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+---
+
+## OpenAI API Key Setup
+
+This app requires access to the OpenAI API for text, image, and audio generation. You must set your API key as an environment variable.
+
+1. **Create a `.env` file in the project root:**
+
+   ```env
+   OPENAI_API_KEY=your_openai_api_key_here
+   ```
+
+2. **Alternatively, export the variable in your shell:**
+   ```bash
+   export OPENAI_API_KEY=your_openai_api_key_here
+   ```
+
+---
+
+## How to Run the App
+
+### Run the Full Pipeline (Recommended)
+
+This will prompt you for a topic and number of items, then run the entire process:
+
+```bash
+python main.py
+```
+
+### Run Individual Steps
+
+You can also run each step separately using the provided scripts:
+
+- **Generate list:**
+  ```bash
+  python run_generate_list.py
+  ```
+- **Generate audio:**
+  ```bash
+  python run_generate_audio.py
+  ```
+- **Generate images:**
+  ```bash
+  python run_generate_images.py
+  ```
+- **Create titled images:**
+  ```bash
+  python run_create_titled_images_short.py
+  ```
+- **Save generated data:**
+  ```bash
+  python run_save_to_generated_data.py
+  ```
+- **Generate video:**
+  ```bash
+  python run_generate_video_short.py
+  ```
+
+---
+
+## Output
+
+- Generated data (JSON, images, audio, video) will be saved in the `outputs/` and `generated_data/` directories.
+- The final video will be in `outputs/video_output/`.
+
+---
+
+## Requirements
+
+- Python 3.8+
+- OpenAI API key
+- [ffmpeg](https://ffmpeg.org/) (required by moviepy; install via `brew install ffmpeg` on macOS or your OS package manager)
+
+---
+
+## Notes
+
+- Make sure your OpenAI account has access to the required APIs (GPT-4, TTS, image generation).
+- If you encounter errors related to API limits, try reducing the number of items or add delays between requests.
+- For best results, use a topic that is suitable for list-style videos (e.g., "Amazing Space Facts").

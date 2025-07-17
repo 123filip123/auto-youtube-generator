@@ -6,8 +6,7 @@ from utils.output_dirs import JSON_OUTPUT_DIR
 
 
 
-def generate_list(prompt_topic: str):
-    num_items: int = 5
+def generate_list(prompt_topic: str, num_items: int = 5):
     system_msg = "You are a helpful assistant that generates a list of interesting facts, places, or concepts, along with creative image prompts."
     user_msg = (
         f"Give me a list of {num_items} items for a YouTube video on the topic: '{prompt_topic}'. "
