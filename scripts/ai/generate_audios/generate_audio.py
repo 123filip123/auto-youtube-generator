@@ -37,12 +37,3 @@ def generate_audio_for_items(items_json: str):
     except Exception as e:
         print(f"Error processing items_json: {e}")
         
-
-# Main function
-if __name__ == "__main__":
-    # Example usage
-    from generate_list import generate_list
-    
-    topic = input("Enter a topic for your video: ")
-    items_json = generate_list(topic)
-    generate_audio_for_items(items_json)

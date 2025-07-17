@@ -1,8 +1,9 @@
 import os
 import shutil
 from datetime import datetime
+from typing import Optional
 
-def save_to_generated_data(json_path: str, prompt: str = None):
+def save_to_generated_data(json_path: str, prompt: Optional[str] = None):
     """
     Save AI-generated content to a separate generated_data folder
     Uses prompt name if provided, otherwise uses timestamp

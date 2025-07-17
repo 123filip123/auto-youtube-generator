@@ -5,6 +5,7 @@ from scripts.non_ai.generate_video_short.generate_video_short import generate_vi
 from scripts.non_ai.create_titled_images_short.create_titled_images_short import create_titled_images_for_items_short
 
 from scripts.non_ai.save_to_generated_data.save_to_generated_data import save_to_generated_data
+from utils.helper_functions import clean_json_input
 from utils.output_file_names import get_list_items_path
 
 def main():
@@ -16,6 +17,9 @@ def main():
     # First generate the list of items
     print("\nGenerating list of items...")
     items_json = generate_list(topic, int(num_items))
+
+    # with open("outputs/json_output/list_items_with_prompts.json", "r") as f:
+    #     items_json = f.read()
     
     # Then generate audio for the items
     print("\nGenerating audio for items...")
@@ -30,7 +34,8 @@ def main():
 
     # Then generate titled images for the items
     print("\nGenerating titled images for items...")
-    create_titled_images_for_items_short(items_json)
+    
+    create_titled_images_for_items_short(clean_json_input(items_json))
 
     # Then generate video for the items
     print("\nGenerating video for items...")

@@ -30,7 +30,12 @@ def generate_image(prompt: str, output_dir: str, filename: str) -> str:
             quality="low"
         )
         
-        image_bytes = base64.b64decode(response.data[0].b64_json)
+        if not response.data or not response.data[0]:
+            raise ValueError("No image data returned from API.")
+        b64_json = response.data[0].b64_json
+        if not b64_json:
+            raise ValueError("No image data returned from API.")
+        image_bytes = base64.b64decode(b64_json)
 
         image_path = os.path.join(output_dir, f"{filename}.png")
         with open(image_path, "wb") as f:
