@@ -33,6 +33,7 @@ def generate_images(items_json: str) -> List[str]:
                 # Generate a filename based on the item and prompt index
                 filename = f"item_{i:02d}_prompt_{j:02d}"
                 
+                
                 # Generate and save the image
                 image_path = generate_image(prompt, IMAGE_OUTPUT_DIR, filename)
                 image_paths.append(image_path)
