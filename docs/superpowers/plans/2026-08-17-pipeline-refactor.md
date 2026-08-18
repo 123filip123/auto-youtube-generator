@@ -58,7 +58,7 @@ Nothing else can be verified until the venv runs and the dead directories are go
 - Modify: `.gitignore`, `requirements.txt`
 - Create: `.env.example`, `pytest.ini`
 
-- [ ] **Step 1: Confirm `zaza_book/` and `auto_youtube_generator/` hold nothing tracked**
+- [x] **Step 1: Confirm `zaza_book/` and `auto_youtube_generator/` hold nothing tracked**
 
 ```bash
 git ls-files zaza_book auto_youtube_generator
@@ -66,21 +66,21 @@ git ls-files zaza_book auto_youtube_generator
 
 Expected: no output at all. If anything prints, stop and report it before deleting.
 
-- [ ] **Step 2: Delete the dead directories**
+- [x] **Step 2: Delete the dead directories**
 
 ```bash
 rm -rf zaza_book auto_youtube_generator __pycache__ outputs/list_output
 find . -path ./venv -prune -o -name "__pycache__" -type d -print -exec rm -rf {} +
 ```
 
-- [ ] **Step 3: Stop tracking `.DS_Store` and ignore it**
+- [x] **Step 3: Stop tracking `.DS_Store` and ignore it**
 
 ```bash
 git rm --cached .DS_Store
 printf '\n# macOS\n.DS_Store\n' >> .gitignore
 ```
 
-- [ ] **Step 4: Fix `requirements.txt`**
+- [x] **Step 4: Fix `requirements.txt`**
 
 `python-dotenv` is imported by `utils/open_ai_client.py` but was never declared. `numpy` is imported directly by the video code and must be declared explicitly rather than relied on transitively through moviepy. `decorator` is pinned because moviepy 1.0.3 breaks on newer versions.
 
@@ -97,7 +97,7 @@ pillow>=10.0.0
 pytest>=8.0.0
 ```
 
-- [ ] **Step 5: Create `.env.example`**
+- [x] **Step 5: Create `.env.example`**
 
 ```
 # Required
@@ -115,7 +115,7 @@ OPENAI_API_KEY=sk-your-key-here
 # VIDEO_PRESET=medium
 ```
 
-- [ ] **Step 6: Create `pytest.ini`**
+- [x] **Step 6: Create `pytest.ini`**
 
 The `pythonpath` option makes `import config` and `from utils.paths import ...` resolve from the repo root without installing the project as a package.
 
@@ -126,7 +126,7 @@ pythonpath = .
 addopts = -q
 ```
 
-- [ ] **Step 7: Rebuild the virtualenv**
+- [x] **Step 7: Rebuild the virtualenv**
 
 The existing `venv/bin/python` symlink is dangling — `./venv/bin/python -c "print(1)"` fails with "no such file or directory". Rebuild it:
 
@@ -139,7 +139,7 @@ python3.12 -m venv venv
 
 Use `python3.12` (moviepy 1.0.3 and numpy have the widest wheel coverage there). If `python3.12` is unavailable, `python3.13` is acceptable.
 
-- [ ] **Step 8: Verify the environment imports cleanly**
+- [x] **Step 8: Verify the environment imports cleanly**
 
 ```bash
 ./venv/bin/python -c "
@@ -151,11 +151,11 @@ print('all imports OK')
 
 Expected: `all imports OK`. `moviepy.editor` is the slow one — if it hangs for 10s on first import that is normal (it probes for ffmpeg).
 
-- [ ] **Step 9: Create the tests directory with a placeholder so pytest has a target**
+- [x] **Step 9: Create the tests directory with a placeholder so pytest has a target**
 
 Create `tests/__init__.py` as an empty file.
 
-- [ ] **Step 10: Verify pytest runs**
+- [x] **Step 10: Verify pytest runs**
 
 ```bash
 ./venv/bin/pytest
@@ -163,7 +163,7 @@ Create `tests/__init__.py` as an empty file.
 
 Expected: `no tests ran` — exit code 5. That is the correct outcome; there are no tests yet.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add -A
@@ -183,7 +183,7 @@ Right now `MAX_RETRIES` and `DELAY_BETWEEN_REQUESTS` are each defined in four se
 **Interfaces:**
 - Produces: `config.<CONSTANT>` for every constant listed below. `utils.paths` exports `AUDIO_OUTPUT_DIR`, `IMAGE_OUTPUT_DIR`, `JSON_OUTPUT_DIR`, `TITLED_IMAGE_OUTPUT_DIR`, `VIDEO_OUTPUT_DIR`, `GENERATED_DATA_ROOT` (all `pathlib.Path`), plus `ensure_output_dirs() -> None`, `image_path(int, int) -> Path`, `audio_path(int) -> Path`, `titled_image_path(int, int) -> Path`, `list_items_path() -> Path`, `video_output_path() -> Path`, `slugify(str) -> str`, `generated_data_dir(str) -> Path`.
 
-- [ ] **Step 1: Write the failing tests for `config.py`**
+- [x] **Step 1: Write the failing tests for `config.py`**
 
 Create `tests/test_config.py`:
 
@@ -242,12 +242,12 @@ def restore_config():
     importlib.reload(config)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `./venv/bin/pytest tests/test_config.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'config'`
 
-- [ ] **Step 3: Write `config.py`**
+- [x] **Step 3: Write `config.py`**
 
 ```python
 """Single source of truth for every tunable constant in the pipeline.
@@ -338,12 +338,12 @@ BLUR_DOWNSCALE_FACTOR = 10
 BACKGROUND_OVERLAY_ALPHA = 128
 ```
 
-- [ ] **Step 4: Run the config tests to verify they pass**
+- [x] **Step 4: Run the config tests to verify they pass**
 
 Run: `./venv/bin/pytest tests/test_config.py -v`
 Expected: PASS, 6 passed
 
-- [ ] **Step 5: Write the failing tests for `utils/paths.py`**
+- [x] **Step 5: Write the failing tests for `utils/paths.py`**
 
 Note `test_slugify_collapses_runs` — the current implementation in `save_to_generated_data.py` turns `"Top 5: Extinct Animals!"` into `"top_5__extinct_animals_"` with a doubled and a trailing underscore. `test_slugify_matches_existing_folders` locks in backwards compatibility with the four folders already in `generated_data/`.
 
@@ -420,12 +420,12 @@ def test_ensure_output_dirs_is_idempotent(tmp_path, monkeypatch):
     assert paths.AUDIO_OUTPUT_DIR.is_dir()
 ```
 
-- [ ] **Step 6: Run the tests to verify they fail**
+- [x] **Step 6: Run the tests to verify they fail**
 
 Run: `./venv/bin/pytest tests/test_paths.py -v`
 Expected: FAIL — `ImportError: cannot import name 'paths' from 'utils'`
 
-- [ ] **Step 7: Write `utils/paths.py`**
+- [x] **Step 7: Write `utils/paths.py`**
 
 All paths are relative to the process working directory, which is the repo root. They are kept relative (not resolved to absolute at import time) so that tests can `monkeypatch.chdir(tmp_path)` and exercise real filesystem behaviour in isolation.
 
@@ -507,12 +507,12 @@ def generated_data_dir(topic: str) -> Path:
     return GENERATED_DATA_ROOT / slugify(topic)
 ```
 
-- [ ] **Step 8: Run the tests to verify they pass**
+- [x] **Step 8: Run the tests to verify they pass**
 
 Run: `./venv/bin/pytest tests/test_paths.py -v`
 Expected: PASS, 16 passed
 
-- [ ] **Step 9: Delete the two superseded modules**
+- [x] **Step 9: Delete the two superseded modules**
 
 The stage modules still import from them and will be updated in later tasks; that is expected and the repo will not run until Task 11. Tests keep passing throughout because they only touch the new modules.
 
@@ -520,7 +520,7 @@ The stage modules still import from them and will be updated in later tasks; tha
 git rm utils/output_dirs.py utils/output_file_names.py
 ```
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add config.py utils/paths.py tests/test_config.py tests/test_paths.py
@@ -540,7 +540,7 @@ Today a JSON *string* is threaded through every stage. `main.py` calls `clean_js
 - Consumes: `config.IMAGE_PROMPTS_PER_ITEM`
 - Produces: `Item` (frozen dataclass with `.title: str`, `.description: str`, `.image_prompts: tuple[str, ...]`, and the `.narration` property), `InvalidItemsError(ValueError)`, `parse_items(raw, *, expected_prompts=None) -> list[Item]`, `items_to_json(items) -> str`, `save_items(items, path) -> None`, `load_items(path) -> list[Item]`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `parse_items` must accept both shapes: the `{"items": [...]}` envelope that JSON-schema structured output returns, and a bare `[...]` list — which is what the four existing files under `generated_data/*/list_items.json` contain.
 
@@ -666,12 +666,12 @@ def test_items_to_json_is_readable():
     assert "\n" in text  # indented, not one long line
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `./venv/bin/pytest tests/test_models.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'models'`
 
-- [ ] **Step 3: Write `models.py`**
+- [x] **Step 3: Write `models.py`**
 
 ```python
 """The typed representation of a generated list item.
@@ -805,12 +805,12 @@ def load_items(path: Path) -> list[Item]:
     return parse_items(path.read_text(encoding="utf-8"), expected_prompts=None)
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `./venv/bin/pytest tests/test_models.py -v`
 Expected: PASS, 17 passed
 
-- [ ] **Step 5: Verify the existing saved files still parse**
+- [x] **Step 5: Verify the existing saved files still parse**
 
 This proves backwards compatibility with the four folders already in `generated_data/`.
 
@@ -826,7 +826,7 @@ for p in sorted(Path('generated_data').glob('*/list_items.json')):
 
 Expected: four lines, each reporting 5 items with 3 prompts each. If any file fails to parse, fix `parse_items` — do not modify the data files.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add models.py tests/test_models.py
@@ -846,7 +846,7 @@ Two problems solved here. First, the current `@retry(stop=stop_after_attempt(3))
 - Consumes: `config.MAX_RETRIES`, `config.RETRY_INITIAL_WAIT_SECONDS`, `config.RETRY_MAX_WAIT_SECONDS`
 - Produces: `RETRYABLE_EXCEPTIONS: tuple[type[Exception], ...]`, `with_retry(fn) -> fn` (decorator), `TaskResult` (dataclass: `.label: str`, `.value: Any`, `.error: BaseException | None`, `.ok: bool`), `run_all(executor, jobs) -> list[TaskResult]` where `jobs` is `Sequence[tuple[str, Callable[[], Any]]]`, `describe_failures(results) -> str`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/test_openai_support.py`:
 
@@ -996,12 +996,12 @@ def test_describe_failures_is_empty_when_all_succeeded():
     assert describe_failures([TaskResult("a", value=1)]) == ""
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `./venv/bin/pytest tests/test_openai_support.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'utils.openai_support'`
 
-- [ ] **Step 3: Write `utils/openai_support.py`**
+- [x] **Step 3: Write `utils/openai_support.py`**
 
 `_wait_strategy` is a function rather than a module constant purely so tests can monkeypatch it to zero and run instantly.
 
@@ -1099,12 +1099,12 @@ def describe_failures(results: Sequence[TaskResult]) -> str:
     return f"{len(failures)} job(s) failed:\n" + "\n".join(lines)
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `./venv/bin/pytest tests/test_openai_support.py -v`
 Expected: PASS, 12 passed
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add utils/openai_support.py tests/test_openai_support.py
