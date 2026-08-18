@@ -1687,7 +1687,7 @@ git commit -m "perf: generate images in parallel and drop fixed sleep delays"
 - Consumes: `config.TTS_MODEL/TTS_VOICE/TTS_INSTRUCTIONS`; `models.Item`; `utils.paths.audio_path`; `utils.openai_support.with_retry`, `run_all`, `Job`
 - Produces: `generate_audio_for_item(item: Item, destination: Path, *, client=None) -> Path` in `utils.py`; `audio_jobs(items, *, client=None) -> list[Job]` and `generate_audio_for_items(items, *, client=None) -> list[TaskResult]` in `generate_audio.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/test_generate_audio.py`:
 
@@ -1801,12 +1801,12 @@ def test_generate_audio_for_items_writes_every_file(tmp_path, monkeypatch):
     assert Path("outputs/audio_output/item_02.mp3").exists()
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `./venv/bin/pytest tests/test_generate_audio.py -v`
 Expected: FAIL — `ImportError: cannot import name 'audio_jobs'`
 
-- [ ] **Step 3: Rewrite `scripts/ai/generate_audios/utils.py`**
+- [x] **Step 3: Rewrite `scripts/ai/generate_audios/utils.py`**
 
 ```python
 """Single-item narration against the OpenAI speech API."""
@@ -1845,7 +1845,7 @@ def generate_audio_for_item(item: Item, destination: Path, *, client=None) -> Pa
     return destination
 ```
 
-- [ ] **Step 4: Rewrite `scripts/ai/generate_audios/generate_audio.py`**
+- [x] **Step 4: Rewrite `scripts/ai/generate_audios/generate_audio.py`**
 
 ```python
 """Fan item narration out into independent, parallelizable jobs."""
@@ -1885,12 +1885,12 @@ def generate_audio_for_items(
         return run_all(executor, audio_jobs(items, client=client))
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `./venv/bin/pytest tests/test_generate_audio.py -v`
 Expected: PASS, 11 passed
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A

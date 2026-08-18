@@ -1,142 +1,164 @@
-import os
-import textwrap
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+"""Compose a source image and its title into a 1080x1920 Shorts frame."""
+
+from functools import lru_cache
 from pathlib import Path
 
-from utils.output_dirs import TITLED_IMAGE_OUTPUT_DIR
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
-def wrap_text(text, font, max_width):
+import config
+
+
+class TitleFontNotFoundError(RuntimeError):
+    """No usable TrueType font was found on this machine."""
+
+
+# Absolute paths first (reliable), then bare names for PIL's own font search.
+# Falling back to ImageFont.load_default() is deliberately NOT an option: it
+# silently renders titles at ~10px, which is how this broke on Linux.
+FONT_CANDIDATES = (
+    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
+    "/System/Library/Fonts/Supplemental/Arial.ttf",
+    "/Library/Fonts/Arial Bold.ttf",
+    "C:\\Windows\\Fonts\\arialbd.ttf",
+    "C:\\Windows\\Fonts\\arial.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+    "Arial Bold.ttf",
+    "Arial.ttf",
+    "arial.ttf",
+    "DejaVuSans-Bold.ttf",
+    "DejaVuSans.ttf",
+)
+
+
+@lru_cache(maxsize=8)
+def load_title_font(size: int) -> ImageFont.FreeTypeFont:
+    """Find a usable TrueType font, or fail loudly.
+
+    Cached, because this used to be re-resolved once per titled image.
     """
-    Wrap text to fit within a maximum width using the given font.
-    
-    Args:
-        text (str): The text to wrap
-        font: The font object to measure text with
-        max_width (int): Maximum width in pixels
-        
-    Returns:
-        list: List of text lines
-    """
+    for candidate in FONT_CANDIDATES:
+        try:
+            return ImageFont.truetype(candidate, size)
+        except (OSError, IOError):
+            continue
+    raise TitleFontNotFoundError(
+        "No usable TrueType font found. Tried:\n  "
+        + "\n  ".join(FONT_CANDIDATES)
+        + "\nInstall one (on Debian/Ubuntu: apt install fonts-dejavu-core) or add "
+        "a path to FONT_CANDIDATES."
+    )
+
+
+def scaled_height(source_width: int, source_height: int, target_width: int) -> int:
+    """Height that preserves the aspect ratio when scaling to `target_width`."""
+    if source_height <= 0 or source_width <= 0:
+        raise ValueError(
+            f"Source image has a non-positive dimension: "
+            f"{source_width}x{source_height}"
+        )
+    return round(target_width * source_height / source_width)
+
+
+def wrap_text(text: str, font, max_width: int) -> list[str]:
+    """Greedily wrap `text` to lines no wider than `max_width` pixels."""
     words = text.split()
-    lines = []
-    current_line = []
-    
+    if not words:
+        return []
+
+    lines: list[str] = []
+    current: list[str] = []
+
     for word in words:
-        test_line = ' '.join(current_line + [word])
-        bbox = font.getbbox(test_line)
-        text_width = bbox[2] - bbox[0]
-        
-        if text_width <= max_width:
-            current_line.append(word)
+        candidate = " ".join(current + [word])
+        bbox = font.getbbox(candidate)
+        if bbox[2] - bbox[0] <= max_width:
+            current.append(word)
+        elif current:
+            lines.append(" ".join(current))
+            current = [word]
         else:
-            if current_line:
-                lines.append(' '.join(current_line))
-                current_line = [word]
-            else:
-                # If a single word is too long, break it
-                lines.append(word)
-                current_line = []
-    
-    if current_line:
-        lines.append(' '.join(current_line))
-    
+            # A single word wider than the line; emit it and move on.
+            lines.append(word)
+            current = []
+
+    if current:
+        lines.append(" ".join(current))
     return lines
 
-def create_titled_image_short(image_path: str, title: str, output_filename: str):
+
+def blurred_background(source: Image.Image, size: tuple[int, int]) -> Image.Image:
+    """Build the blurred, lightened backdrop.
+
+    Blurring at 1/N scale and upscaling gives a visually identical result to a
+    full-resolution blur at this radius, for roughly 1/N^2 of the work.
     """
-    Create an image with a title below it, matching the YouTube Shorts video layout.
-    The background will be a blurred version of the source image.
-    
-    Args:
-        image_path (str): Path to the source image
-        title (str): Title text to add below the image
-        output_filename (str): Name of the output file (without extension)
-    """
-    try:
-        # Create output directory if it doesn't exist
-        Path(TITLED_IMAGE_OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
-        
-        # Load and resize image
-        pil_image = Image.open(image_path)
-        aspect_ratio = pil_image.width / pil_image.height
-        new_height = int(1080 * aspect_ratio)
-        pil_image = pil_image.resize((1080, new_height), Image.Resampling.LANCZOS)
-        
-        # Create background dimensions (1080x1920 for vertical video)
-        bg_width = 1080
-        bg_height = 1920
-        
-        # Create blurred background from the source image
-        bg_image = Image.open(image_path)
-        bg_image = bg_image.resize((bg_width, bg_height), Image.Resampling.LANCZOS)
-        bg_image = bg_image.filter(ImageFilter.GaussianBlur(radius=90))
-        
-        # Add a semi-transparent white overlay to ensure text readability
-        overlay = Image.new('RGBA', (bg_width, bg_height), (255, 255, 255, 128))
-        bg_image = Image.alpha_composite(bg_image.convert('RGBA'), overlay)
-        bg_image = bg_image.convert('RGB')
-        
-        # Calculate positions
-        image_y = (bg_height - new_height - 80) // 2  # 80px gap for text
-        image_x = (bg_width - 1080) // 2
-        
-        # Paste the image onto the background
-        bg_image.paste(pil_image, (image_x, image_y))
-        
-        # Add title text
-        draw = ImageDraw.Draw(bg_image)
-        
-        # Try multiple font options with larger size for better visibility
-        font = None
-        font_size = 120  # Increased from 80 to 120 for better visibility
-        
-        # Try different font options in order of preference
-        font_options = [
-            "arial.ttf",
-            "Arial.ttf", 
-            "arialbd.ttf",
-            "Arial-Bold.ttf",
-            "arial-bold.ttf",
-        ]
-        
-        for font_path in font_options:
-            try:
-                font = ImageFont.truetype(font_path, font_size)
-                break
-            except (IOError, OSError):
-                continue
-        
-        # If no system fonts work, create a larger default font
-        if font is None:
-            try:
-                # Try to create a larger default font
-                font = ImageFont.load_default()
-                # Note: Default font size is usually small, but we'll work with what we have
-            except:
-                # Last resort - create a basic font
-                font = ImageFont.load_default()
-        
-        # Calculate text position and wrap text if needed
-        max_text_width = bg_width - 100  # Leave 50px margin on each side
-        wrapped_lines = wrap_text(title, font, max_text_width)
-        
-        # Calculate line height and total text height
-        line_height = font_size + 10  # Add some spacing between lines
-        total_text_height = len(wrapped_lines) * line_height
-        
-        # Calculate text position
-        text_y = image_y + new_height + 220  # 150px gap below image (increased from 80px)
-        
-        # Draw each line of text
-        for i, line in enumerate(wrapped_lines):
-            line_y = text_y + (i * line_height) - (total_text_height // 2)
-            draw.text((bg_width//2, line_y), line, fill='black', font=font, anchor="mm")
-        
-        # Save the final image
-        output_path = os.path.join(TITLED_IMAGE_OUTPUT_DIR, output_filename)
-        bg_image.save(output_path)
-        
-        return output_path
-    except Exception as e:
-        print(f"Error generating titled image for '{title}' from '{image_path}': {str(e)}")
-        raise  # Re-raise the exception to be handled by the caller
+    width, height = size
+    factor = config.BLUR_DOWNSCALE_FACTOR
+
+    small_size = (max(1, width // factor), max(1, height // factor))
+    small = source.convert("RGB").resize(small_size, Image.Resampling.BILINEAR)
+    small = small.filter(
+        ImageFilter.GaussianBlur(radius=config.BACKGROUND_BLUR_RADIUS / factor)
+    )
+    background = small.resize(size, Image.Resampling.BILINEAR)
+
+    overlay = Image.new(
+        "RGBA", size, (255, 255, 255, config.BACKGROUND_OVERLAY_ALPHA)
+    )
+    return Image.alpha_composite(background.convert("RGBA"), overlay).convert("RGB")
+
+
+def create_titled_image_short(
+    source_path: Path, title: str, destination: Path
+) -> Path:
+    """Render `source_path` onto a blurred backdrop with `title` beneath it."""
+    source_path = Path(source_path)
+    destination = Path(destination)
+    if not source_path.exists():
+        raise FileNotFoundError(f"Source image not found: {source_path}")
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    canvas_size = (config.VIDEO_WIDTH, config.VIDEO_HEIGHT)
+
+    # Opened once and reused for both foreground and background; the previous
+    # version opened the same file twice.
+    with Image.open(source_path) as opened:
+        source = opened.convert("RGB")
+
+        foreground_height = scaled_height(
+            source.width, source.height, config.VIDEO_WIDTH
+        )
+        foreground = source.resize(
+            (config.VIDEO_WIDTH, foreground_height), Image.Resampling.LANCZOS
+        )
+        canvas = blurred_background(source, canvas_size)
+
+    foreground_top = (config.VIDEO_HEIGHT - foreground_height - 80) // 2
+    canvas.paste(foreground, (0, foreground_top))
+
+    font = load_title_font(config.TITLE_FONT_SIZE)
+    max_text_width = config.VIDEO_WIDTH - (2 * config.TITLE_SIDE_MARGIN)
+    lines = wrap_text(title, font, max_text_width)
+
+    if lines:
+        draw = ImageDraw.Draw(canvas)
+        line_height = config.TITLE_FONT_SIZE + config.TITLE_LINE_SPACING
+        block_height = len(lines) * line_height
+        block_top = (
+            foreground_top + foreground_height + config.TITLE_GAP_BELOW_IMAGE
+        )
+        for index, line in enumerate(lines):
+            y = block_top + (index * line_height) - (block_height // 2)
+            draw.text(
+                (config.VIDEO_WIDTH // 2, y),
+                line,
+                fill=config.TITLE_COLOR,
+                font=font,
+                anchor="mm",
+            )
+
+    canvas.save(destination)
+    return destination
