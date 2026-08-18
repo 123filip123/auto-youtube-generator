@@ -2695,7 +2695,7 @@ git commit -m "perf: cheaper zoom and single audio handle per item; support any 
 - Consumes: `models.Item`, `models.save_items`; `utils.paths.*`
 - Produces: `save_to_generated_data(topic: str, items: Sequence[Item]) -> Path`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/test_archive.py`:
 
@@ -2777,12 +2777,12 @@ def test_falls_back_to_a_timestamp_for_an_unusable_topic(populated_outputs):
     assert folder.is_dir()
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `./venv/bin/pytest tests/test_archive.py -v`
 Expected: FAIL — `TypeError` on the changed signature
 
-- [ ] **Step 3: Rewrite `scripts/non_ai/save_to_generated_data/save_to_generated_data.py`**
+- [x] **Step 3: Rewrite `scripts/non_ai/save_to_generated_data/save_to_generated_data.py`**
 
 ```python
 """Archive one finished run into `generated_data/<topic-slug>/`."""
@@ -2850,16 +2850,16 @@ def save_to_generated_data(topic: str, items: Sequence[Item]) -> Path:
     return folder
 ```
 
-- [ ] **Step 4: Create `scripts/non_ai/save_to_generated_data/__init__.py`**
+- [x] **Step 4: Create `scripts/non_ai/save_to_generated_data/__init__.py`**
 
 Create it as an empty file.
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `./venv/bin/pytest tests/test_archive.py -v`
 Expected: PASS, 9 passed
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A

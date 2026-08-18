@@ -1,0 +1,65 @@
+from pathlib import Path
+
+import pytest
+from PIL import Image
+
+from models import Item
+from pipeline import PipelineError, missing_media, missing_titled_images
+from utils.paths import audio_path, ensure_output_dirs, image_path, titled_image_path
+
+
+def one_item():
+    return [Item("Dodo", "A bird.", ("a", "b", "c"))]
+
+
+def write_media(items, *, skip=()):
+    for item_number, item in enumerate(items, start=1):
+        if ("audio", item_number) not in skip:
+            audio_path(item_number).write_bytes(b"audio")
+        for prompt_number in range(1, len(item.image_prompts) + 1):
+            if ("image", item_number, prompt_number) in skip:
+                continue
+            image_path(item_number, prompt_number).write_bytes(b"image")
+
+
+def test_missing_media_is_empty_when_everything_exists(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    ensure_output_dirs()
+    write_media(one_item())
+    assert missing_media(one_item()) == []
+
+
+def test_missing_media_reports_a_missing_image(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    ensure_output_dirs()
+    write_media(one_item(), skip=[("image", 1, 2)])
+    assert missing_media(one_item()) == [image_path(1, 2)]
+
+
+def test_missing_media_reports_a_missing_audio_file(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    ensure_output_dirs()
+    write_media(one_item(), skip=[("audio", 1)])
+    assert missing_media(one_item()) == [audio_path(1)]
+
+
+def test_missing_media_reports_an_empty_file(tmp_path, monkeypatch):
+    # A zero-byte file would pass an exists() check but break the renderer.
+    monkeypatch.chdir(tmp_path)
+    ensure_output_dirs()
+    write_media(one_item())
+    image_path(1, 1).write_bytes(b"")
+    assert image_path(1, 1) in missing_media(one_item())
+
+
+def test_missing_titled_images_reports_gaps(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    ensure_output_dirs()
+    titled_image_path(1, 1).write_bytes(b"x")
+    missing = missing_titled_images(one_item())
+    assert titled_image_path(1, 2) in missing
+    assert titled_image_path(1, 1) not in missing
+
+
+def test_pipeline_error_is_a_runtime_error():
+    assert issubclass(PipelineError, RuntimeError)

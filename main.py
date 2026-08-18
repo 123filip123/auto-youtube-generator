@@ -1,46 +1,69 @@
-from scripts.ai.generate_audios.generate_audio import generate_audio_for_items
-from scripts.ai.generate_images.generate_images import generate_images
-from scripts.ai.generate_list.generate_list import generate_list
-from scripts.non_ai.generate_video_short.generate_video_short import generate_video_short
-from scripts.non_ai.create_titled_images_short.create_titled_images_short import create_titled_images_for_items_short
+"""Command-line entry point for the auto YouTube generator."""
 
-from scripts.non_ai.save_to_generated_data.save_to_generated_data import save_to_generated_data
-from utils.helper_functions import clean_json_input
-from utils.output_file_names import get_list_items_path
+import argparse
+import sys
 
-def main():
-    # Get the topic from user input
-    topic = input("Enter a topic for your video: ")
+from models import InvalidItemsError
+from pipeline import PipelineError, run_pipeline
 
-    num_items = input("Enter the number of items for your video: ")
-    
-    # First generate the list of items
-    print("\nGenerating list of items...")
-    items_json = generate_list(topic, int(num_items))
 
-    # with open("outputs/json_output/list_items_with_prompts.json", "r") as f:
-    #     items_json = f.read()
-    
-    # Then generate audio for the items
-    print("\nGenerating audio for items...")
-    generate_audio_for_items(items_json)
+def parse_args(argv=None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Generate a YouTube Shorts video from a topic."
+    )
+    parser.add_argument("--topic", help="Video topic. Prompted for if omitted.")
+    parser.add_argument(
+        "--items", type=int, help="Number of items. Prompted for if omitted."
+    )
+    return parser.parse_args(argv)
 
-    # Then generate images for the items
-    print("\nGenerating images for items...")
-    generate_images(items_json)
 
-    # Save AI-generated content to generated_data folder
-    save_to_generated_data(get_list_items_path(), topic)
+def prompt_for_topic() -> str:
+    while True:
+        topic = input("Enter a topic for your video: ").strip()
+        if topic:
+            return topic
+        print("Please enter a topic.")
 
-    # Then generate titled images for the items
-    print("\nGenerating titled images for items...")
-    
-    create_titled_images_for_items_short(clean_json_input(items_json))
 
-    # Then generate video for the items
-    print("\nGenerating video for items...")
-    generate_video_short()
+def prompt_for_item_count() -> int:
+    while True:
+        raw = input("Enter the number of items for your video: ").strip()
+        try:
+            count = int(raw)
+        except ValueError:
+            print(f"'{raw}' is not a whole number. Try again.")
+            continue
+        if count < 1:
+            print("Please enter a number of at least 1.")
+            continue
+        return count
+
+
+def main(argv=None) -> int:
+    args = parse_args(argv)
+
+    topic = args.topic.strip() if args.topic else prompt_for_topic()
+    if args.items is not None:
+        if args.items < 1:
+            print(f"--items must be at least 1, got {args.items}", file=sys.stderr)
+            return 2
+        num_items = args.items
+    else:
+        num_items = prompt_for_item_count()
+
+    try:
+        video = run_pipeline(topic, num_items)
+    except (PipelineError, InvalidItemsError) as exc:
+        print(f"\nPipeline failed: {exc}", file=sys.stderr)
+        return 1
+    except KeyboardInterrupt:
+        print("\nInterrupted.", file=sys.stderr)
+        return 130
+
+    print(f"\nDone: {video}")
+    return 0
+
 
 if __name__ == "__main__":
-    main()
-    
+    raise SystemExit(main())
