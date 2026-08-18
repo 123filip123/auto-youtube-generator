@@ -1,38 +1,63 @@
-import os
+"""Archive one finished run into `generated_data/<topic-slug>/`."""
+
 import shutil
 from datetime import datetime
-from typing import Optional
+from pathlib import Path
+from typing import Sequence
 
-def save_to_generated_data(json_path: str, prompt: Optional[str] = None):
+from models import Item, save_items
+from utils.paths import (
+    ARCHIVED_LIST_FILENAME,
+    AUDIO_OUTPUT_DIR,
+    GENERATED_DATA_ROOT,
+    IMAGE_OUTPUT_DIR,
+    TITLED_IMAGE_OUTPUT_DIR,
+    VIDEO_FILENAME,
+    slugify,
+    video_output_path,
+)
+
+
+def _copy_tree(source: Path, destination: Path, suffix: str) -> int:
+    destination.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    if not source.is_dir():
+        return copied
+    for entry in sorted(source.iterdir()):
+        if entry.is_file() and entry.suffix == suffix:
+            shutil.copy2(entry, destination / entry.name)
+            copied += 1
+    return copied
+
+
+def save_to_generated_data(topic: str, items: Sequence[Item]) -> Path:
+    """Copy this run's list, audio, images, titled images and video into an archive.
+
+    Must run *after* the video is rendered — the previous pipeline called this
+    before video assembly, so the archive never contained the finished video.
     """
-    Save AI-generated content to a separate generated_data folder
-    Uses prompt name if provided, otherwise uses timestamp
-    """
-    # Create folder name based on prompt or timestamp
-    if prompt:
-        # Clean prompt to be folder-name friendly
-        folder_name = "".join(c if c.isalnum() else "_" for c in prompt.lower())
-        folder_name = "_".join(folder_name.split())
-    else:
-        folder_name = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    generated_folder = f"generated_data/{folder_name}"
-    
-    # Create folder structure
-    os.makedirs(f"{generated_folder}/audio", exist_ok=True)
-    os.makedirs(f"{generated_folder}/images", exist_ok=True)
-    
-    # Copy JSON file
-    shutil.copy2(json_path, f"{generated_folder}/list_items.json")
-    
-    # Copy audio files
-    for file in os.listdir("outputs/audio_output"):
-        if file.endswith(".mp3"):
-            shutil.copy2(f"outputs/audio_output/{file}", f"{generated_folder}/audio/{file}")
-    
-    # Copy image files
-    for file in os.listdir("outputs/image_output"):
-        if file.endswith(".png"):
-            shutil.copy2(f"outputs/image_output/{file}", f"{generated_folder}/images/{file}")
-    
-    print(f"\nSaved AI-generated content to: {generated_folder}")
+    slug = slugify(topic)
+    if slug == "untitled":
+        slug = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    folder = GENERATED_DATA_ROOT / slug
+    folder.mkdir(parents=True, exist_ok=True)
+
+    save_items(items, folder / ARCHIVED_LIST_FILENAME)
+
+    audio_count = _copy_tree(AUDIO_OUTPUT_DIR, folder / "audio", ".mp3")
+    image_count = _copy_tree(IMAGE_OUTPUT_DIR, folder / "images", ".png")
+    titled_count = _copy_tree(
+        TITLED_IMAGE_OUTPUT_DIR, folder / "titled_images", ".png"
+    )
+
+    video = video_output_path()
+    if video.exists():
+        shutil.copy2(video, folder / VIDEO_FILENAME)
+
+    print(
+        f"\nArchived to {folder}: {audio_count} audio, {image_count} images, "
+        f"{titled_count} titled images"
+        + (", 1 video" if video.exists() else ", no video")
+    )
+    return folder

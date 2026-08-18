@@ -2369,7 +2369,7 @@ Per item, the mp3 is currently opened **four separate times**: once in `generate
 - Consumes: `config.VIDEO_*/INTRO_SILENCE_SECONDS/OUTRO_SILENCE_SECONDS/ZOOM_END_SCALE`; `models.Item`; `utils.paths.audio_path`, `titled_image_path`, `video_output_path`, `VIDEO_OUTPUT_DIR`
 - Produces: in `utils.py` — `zoom_scale(t, segment_duration, end_scale) -> float`, `segment_bounds(total_duration, count) -> list[tuple[float, float]]`, `build_image_clip(path, segment_duration, start_time)`, `build_item_audio(audio_path) -> tuple[clip, float]`, `build_item_clip(item_number, image_count) -> clip`. In `generate_video_short.py` — `generate_video_short(items: Sequence[Item]) -> Path`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 The pure timing/scaling maths is tested directly; the moviepy assembly is covered by one slow end-to-end render marked so it can be deselected.
 
@@ -2484,12 +2484,12 @@ markers =
     slow: end-to-end renders that take several seconds
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `./venv/bin/pytest tests/test_video.py -v -m "not slow"`
 Expected: FAIL — `ImportError: cannot import name 'segment_bounds'`
 
-- [ ] **Step 3: Rewrite `scripts/non_ai/generate_video_short/utils.py`**
+- [x] **Step 3: Rewrite `scripts/non_ai/generate_video_short/utils.py`**
 
 The zoom now builds a `VideoClip` with a closure over an already-decoded PIL image, rather than an `ImageClip` wrapped in `.fl()`. That removes a numpy round-trip per frame, and BILINEAR replaces LANCZOS — on a continuously scaling still at 24fps the difference is not visible, and it is several times cheaper.
 
@@ -2593,7 +2593,7 @@ def build_item_clip(item_number: int, image_count: int):
     return CompositeVideoClip(layers).set_duration(total_duration).set_audio(audio)
 ```
 
-- [ ] **Step 4: Rewrite `scripts/non_ai/generate_video_short/generate_video_short.py`**
+- [x] **Step 4: Rewrite `scripts/non_ai/generate_video_short/generate_video_short.py`**
 
 ```python
 """Concatenate per-item clips into the final vertical video."""
@@ -2643,21 +2643,21 @@ def generate_video_short(items: Sequence[Item]) -> Path:
     return output_path
 ```
 
-- [ ] **Step 5: Create `scripts/non_ai/generate_video_short/__init__.py`**
+- [x] **Step 5: Create `scripts/non_ai/generate_video_short/__init__.py`**
 
 Create it as an empty file.
 
-- [ ] **Step 6: Run the fast tests to verify they pass**
+- [x] **Step 6: Run the fast tests to verify they pass**
 
 Run: `./venv/bin/pytest tests/test_video.py -v -m "not slow"`
 Expected: PASS, 11 passed
 
-- [ ] **Step 7: Run the slow end-to-end render test**
+- [x] **Step 7: Run the slow end-to-end render test**
 
 Run: `./venv/bin/pytest tests/test_video.py -v -m slow`
 Expected: PASS, 1 passed. This takes 10-30 seconds and shells out to ffmpeg.
 
-- [ ] **Step 8: Render a real video from existing assets and compare against the old one**
+- [x] **Step 8: Render a real video from existing assets and compare against the old one**
 
 `outputs/video_output/final_video_short.mp4` is the video the old code produced. Move it aside, render fresh, and compare.
 
@@ -2674,7 +2674,7 @@ open /tmp/video_before.mp4 outputs/video_output/final_video_short.mp4
 
 Expected: the new render is faster, and visually the two are equivalent — same duration, same zoom, audio in sync, silence before and after each item. Record the timing in the commit message. If the new video looks different in any way other than being sharper or faster, stop and investigate.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add -A
