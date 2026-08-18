@@ -1,56 +1,45 @@
-import json
-from moviepy.editor import AudioFileClip, concatenate_videoclips
+"""Concatenate per-item clips into the final vertical video."""
+
 import os
+from pathlib import Path
+from typing import Sequence
 
-from scripts.non_ai.generate_video_short.utils import create_item_video_clip
-from utils.output_dirs import AUDIO_OUTPUT_DIR, VIDEO_OUTPUT_DIR
-from utils.output_file_names import get_audio_file_name, get_list_items_path, get_video_output_path
+from moviepy.editor import concatenate_videoclips
+
+import config
+from models import Item
+from utils.paths import VIDEO_OUTPUT_DIR, video_output_path
+
+from .utils import build_item_clip
 
 
-def generate_video_short():
+def generate_video_short(items: Sequence[Item]) -> Path:
+    """Render a 1080x1920 video from the titled images and narration on disk.
+
+    Each item shows its images in sequence over its narration, with a short
+    silence before and after, and a slow zoom on every image.
     """
-    Generate a vertical video suitable for YouTube Shorts by combining titled images and audio files based on JSON input.
-    Each item will:
-    - Start with a 0.2 second delay before audio begins
-    - Have a 0.5 second delay after audio ends before next item
-    - Display all three images for the item, evenly distributed during the duration
-    - Maintain 9:16 aspect ratio (1080x1920) for YouTube Shorts
-    - Include a smooth zoom effect on the images
-    """
-    # Setup paths and create output directory
-    json_path = get_list_items_path()
-    output_path = get_video_output_path()
-    os.makedirs(VIDEO_OUTPUT_DIR, exist_ok=True)
-    
-    # Load data
-    with open(json_path, 'r') as f:
-        data = json.load(f)
-    
-    # Process each item
-    video_clips = []
-    for i, item in enumerate(data, start=1):
-        audio_file = os.path.join(AUDIO_OUTPUT_DIR, get_audio_file_name(i))
-        audio_clip = AudioFileClip(audio_file)
-        total_duration = 0.2 + audio_clip.duration + 0.5
-        
-        video_clip = create_item_video_clip(i, total_duration)
-        video_clips.append(video_clip)
-    
-    # Create final video
-    final_clip = concatenate_videoclips(video_clips)
-    
-    # Write the final video
-    final_clip.write_videofile(
-        output_path,
-        fps=24,
-        codec='libx264',
-        audio_codec='aac'
-    )
-    
-    # Cleanup
-    final_clip.close()
-    for clip in video_clips:
-        clip.close()
+    VIDEO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    output_path = video_output_path()
 
-if __name__ == "__main__":
-    generate_video_short() 
+    clips = [
+        build_item_clip(item_number, len(item.image_prompts))
+        for item_number, item in enumerate(items, start=1)
+    ]
+
+    final_clip = concatenate_videoclips(clips)
+    try:
+        final_clip.write_videofile(
+            str(output_path),
+            fps=config.VIDEO_FPS,
+            codec=config.VIDEO_CODEC,
+            audio_codec=config.VIDEO_AUDIO_CODEC,
+            preset=config.VIDEO_PRESET,
+            threads=os.cpu_count() or 4,
+        )
+    finally:
+        final_clip.close()
+        for clip in clips:
+            clip.close()
+
+    return output_path

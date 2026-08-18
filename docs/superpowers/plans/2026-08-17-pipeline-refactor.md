@@ -1911,7 +1911,7 @@ Three concrete defects here. `new_height = int(1080 * aspect_ratio)` multiplies 
 - Consumes: `config.VIDEO_WIDTH/VIDEO_HEIGHT/TITLE_*/BACKGROUND_*`; `models.Item`; `utils.paths.image_path`, `titled_image_path`
 - Produces: in `utils.py` — `TitleFontNotFoundError`, `scaled_height(src_w, src_h, target_w) -> int`, `wrap_text(text, font, max_width) -> list[str]`, `load_title_font(size) -> ImageFont.FreeTypeFont`, `blurred_background(source, size) -> Image.Image`, `create_titled_image_short(source, title, destination) -> Path`. In `create_titled_images_short.py` — `create_titled_images_for_items_short(items) -> list[TaskResult]`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/test_titled_images.py`:
 
@@ -2076,12 +2076,12 @@ def test_batch_reports_a_missing_source_without_crashing(tmp_path, monkeypatch):
     assert sum(1 for r in results if not r.ok) == 2
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `./venv/bin/pytest tests/test_titled_images.py -v`
 Expected: FAIL — `ImportError: cannot import name 'scaled_height'`
 
-- [ ] **Step 3: Rewrite `scripts/non_ai/create_titled_images_short/utils.py`**
+- [x] **Step 3: Rewrite `scripts/non_ai/create_titled_images_short/utils.py`**
 
 ```python
 """Compose a source image and its title into a 1080x1920 Shorts frame."""
@@ -2250,7 +2250,7 @@ def create_titled_image_short(
     return destination
 ```
 
-- [ ] **Step 4: Rewrite `scripts/non_ai/create_titled_images_short/create_titled_images_short.py`**
+- [x] **Step 4: Rewrite `scripts/non_ai/create_titled_images_short/create_titled_images_short.py`**
 
 Compositing is CPU-bound but Pillow releases the GIL inside its C routines, so a thread pool genuinely helps here.
 
@@ -2294,16 +2294,16 @@ def create_titled_images_for_items_short(
         return run_all(executor, titled_image_jobs(items))
 ```
 
-- [ ] **Step 5: Create the `__init__.py` files**
+- [x] **Step 5: Create the `__init__.py` files**
 
 Create `scripts/non_ai/__init__.py` and `scripts/non_ai/create_titled_images_short/__init__.py` as empty files.
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `./venv/bin/pytest tests/test_titled_images.py -v`
 Expected: PASS, 18 passed
 
-- [ ] **Step 7: Measure the blur speedup**
+- [x] **Step 7: Measure the blur speedup**
 
 ```bash
 ./venv/bin/python -c "
@@ -2330,7 +2330,7 @@ print(f'new downscaled blur: {(time.perf_counter()-start)/5*1000:.1f} ms/image')
 
 Expected: the new path is at least 10x faster. Record both numbers in the commit message.
 
-- [ ] **Step 8: Eyeball one rendered frame**
+- [x] **Step 8: Eyeball one rendered frame**
 
 Automated tests confirm geometry but not that it looks right. Render one and open it.
 
@@ -2348,7 +2348,7 @@ open /tmp/titled_preview.png
 
 Expected: 1080×1920, source image centred on a soft blurred backdrop, title in large black text below it. If the title is tiny, `load_title_font` picked the wrong font — fix it rather than accepting it.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add -A
