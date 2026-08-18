@@ -2880,7 +2880,7 @@ This wires everything together and adds the missing safety net: today, if one im
 - Consumes: everything built so far
 - Produces: `PipelineError(RuntimeError)`, `missing_media(items) -> list[Path]`, `missing_titled_images(items) -> list[Path]`, `run_pipeline(topic: str, num_items: int, *, client=None) -> Path`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/test_pipeline.py`:
 
@@ -2952,12 +2952,12 @@ def test_pipeline_error_is_a_runtime_error():
     assert issubclass(PipelineError, RuntimeError)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `./venv/bin/pytest tests/test_pipeline.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'pipeline'`
 
-- [ ] **Step 3: Write `pipeline.py`**
+- [x] **Step 3: Write `pipeline.py`**
 
 The key structural change: image jobs and audio jobs are submitted into *one* executor, so they interleave under a single global concurrency cap rather than running as two sequential stages.
 
@@ -3081,7 +3081,7 @@ def run_pipeline(topic: str, num_items: int, *, client=None) -> Path:
     return video
 ```
 
-- [ ] **Step 4: Rewrite `main.py`**
+- [x] **Step 4: Rewrite `main.py`**
 
 Running `python main.py` with no arguments behaves exactly as it does today: two interactive prompts. The flags are additive, and they make the pipeline scriptable.
 
@@ -3157,17 +3157,17 @@ if __name__ == "__main__":
     raise SystemExit(main())
 ```
 
-- [ ] **Step 5: Run the pipeline tests to verify they pass**
+- [x] **Step 5: Run the pipeline tests to verify they pass**
 
 Run: `./venv/bin/pytest tests/test_pipeline.py -v`
 Expected: PASS, 6 passed
 
-- [ ] **Step 6: Run the whole suite**
+- [x] **Step 6: Run the whole suite**
 
 Run: `./venv/bin/pytest -v`
 Expected: all tests pass. Confirm nothing was broken by the rewiring.
 
-- [ ] **Step 7: Verify no stale imports survive anywhere**
+- [x] **Step 7: Verify no stale imports survive anywhere**
 
 ```bash
 grep -rn "output_dirs\|output_file_names\|helper_functions\|clean_json_input\|zaza\|auto_youtube_generator\|tts-1\|gpt-4\"" \
@@ -3176,7 +3176,7 @@ grep -rn "output_dirs\|output_file_names\|helper_functions\|clean_json_input\|za
 
 Expected: no output. Any hit is a leftover from the old structure — fix it.
 
-- [ ] **Step 8: Verify the CLI argument handling without spending API credits**
+- [x] **Step 8: Verify the CLI argument handling without spending API credits**
 
 ```bash
 ./venv/bin/python main.py --help
@@ -3204,7 +3204,7 @@ open generated_data/top_3_deep_sea_creatures/final_video_short.mp4
 
 Expected: `list_items.json`, `final_video_short.mp4`, 3 files under `audio/`, 9 under `images/`, 9 under `titled_images/`. The video plays correctly.
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add -A
@@ -3220,7 +3220,7 @@ The README currently documents five `run_*.py` scripts that do not exist in the 
 **Files:**
 - Modify: `README.md`
 
-- [ ] **Step 1: Confirm the scripts the README references really are absent**
+- [x] **Step 1: Confirm the scripts the README references really are absent**
 
 ```bash
 ls run_generate_list.py run_generate_audio.py run_generate_images.py \
@@ -3229,7 +3229,7 @@ ls run_generate_list.py run_generate_audio.py run_generate_images.py \
 
 Expected: five "No such file or directory" errors, confirming the section must be removed rather than fixed.
 
-- [ ] **Step 2: Update the pipeline description**
+- [x] **Step 2: Update the pipeline description**
 
 In `README.md`, replace the "Pipeline steps" list with the current order, which now archives last:
 
@@ -3248,7 +3248,7 @@ In `README.md`, replace the "Pipeline steps" list with the current order, which 
    — into `generated_data/<topic-slug>/`.
 ```
 
-- [ ] **Step 3: Replace the "Run Individual Steps" section**
+- [x] **Step 3: Replace the "Run Individual Steps" section**
 
 Delete the entire list of nonexistent `run_*.py` scripts and replace with:
 
@@ -3271,7 +3271,7 @@ Output lands in `outputs/`, and a complete copy of the run is archived to
 `generated_data/<topic-slug>/`.
 ```
 
-- [ ] **Step 4: Add a Configuration section**
+- [x] **Step 4: Add a Configuration section**
 
 Insert after the API key section:
 
@@ -3293,7 +3293,7 @@ variable of the same name (see `.env.example`). The ones worth knowing:
 | `VIDEO_PRESET` | `medium` | x264 preset. `ultrafast` renders quicker at a larger file size. |
 ```
 
-- [ ] **Step 5: Add a Development section**
+- [x] **Step 5: Add a Development section**
 
 Append to the end of the README:
 
@@ -3320,7 +3320,7 @@ Note that `moviepy` is pinned to `1.0.3` and requires `decorator==4.4.2`.
 Upgrading either will break video assembly.
 ```
 
-- [ ] **Step 6: Verify every command in the README actually works**
+- [x] **Step 6: Verify every command in the README actually works**
 
 ```bash
 ./venv/bin/pytest -m "not slow"
@@ -3329,7 +3329,7 @@ Upgrading either will break video assembly.
 
 Expected: tests pass; help text matches what the README describes.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add README.md
