@@ -201,3 +201,5 @@ outputs/
 
 # generated data
 generated_data/
+# macOS
+.DS_Store

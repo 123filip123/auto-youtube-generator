@@ -27,7 +27,7 @@ def generate_image(prompt: str, output_dir: str, filename: str) -> str:
             prompt=prompt,
             size="1024x1024",
             n=1,
-            quality="low"
+            quality="medium"
         )
         
         if not response.data or not response.data[0]:
