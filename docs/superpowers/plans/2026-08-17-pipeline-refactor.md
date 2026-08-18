@@ -1126,7 +1126,7 @@ git commit -m "feat: add shared retry policy and bounded parallel job runner"
 - Consumes: `config.TEXT_MODEL`, `config.TEXT_TEMPERATURE`, `config.IMAGE_PROMPTS_PER_ITEM`; `models.parse_items`, `models.Item`; `utils.openai_support.with_retry`
 - Produces: `generate_list(topic: str, num_items: int, *, client=None) -> list[Item]`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/test_generate_list.py`:
 
@@ -1239,16 +1239,16 @@ def test_does_not_write_to_disk():
     generate_list("extinct animals", 3, client=client)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `./venv/bin/pytest tests/test_generate_list.py -v`
 Expected: FAIL — `ImportError: cannot import name 'LIST_JSON_SCHEMA'`
 
-- [ ] **Step 3: Create the package `__init__.py` files**
+- [x] **Step 3: Create the package `__init__.py` files**
 
 Create `scripts/__init__.py`, `scripts/ai/__init__.py`, and `scripts/ai/generate_list/__init__.py` as empty files. The codebase currently relies on implicit namespace packages, which is why `generate_audio.py` can use `from .utils import ...` while `generate_video_short.py` uses a full absolute path. Explicit packages make relative imports work consistently.
 
-- [ ] **Step 4: Rewrite `scripts/ai/generate_list/generate_list.py`**
+- [x] **Step 4: Rewrite `scripts/ai/generate_list/generate_list.py`**
 
 Note the schema deliberately does not constrain `image_prompts` length — OpenAI strict mode does not support `minItems`/`maxItems`, so the count is enforced in `parse_items` instead, and asked for in the prompt text.
 
@@ -1383,12 +1383,12 @@ def generate_list(topic: str, num_items: int = 5, *, client=None) -> list[Item]:
     return parse_items(content or "")
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `./venv/bin/pytest tests/test_generate_list.py -v`
 Expected: PASS, 10 passed
 
-- [ ] **Step 6: Delete `utils/helper_functions.py`**
+- [x] **Step 6: Delete `utils/helper_functions.py`**
 
 `clean_json_input` has no remaining callers — its fence-stripping job now lives inside `models._strip_markdown_fences`, used only for reading legacy files.
 
@@ -1399,7 +1399,7 @@ grep -rn "clean_json_input\|helper_functions" --include="*.py" . --exclude-dir=v
 
 Expected from the grep: no output.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A

@@ -1,47 +1,40 @@
+"""Single-image generation against the OpenAI images API."""
 
 import base64
 import os
 from pathlib import Path
-from tenacity import retry, stop_after_attempt, wait_exponential
+
+import config
 from utils.open_ai_client import get_open_ai_client
-
-MAX_RETRIES = 3
-DELAY_BETWEEN_REQUESTS = 5  # seconds
+from utils.openai_support import with_retry
 
 
-@retry(stop=stop_after_attempt(MAX_RETRIES), wait=wait_exponential(multiplier=1, min=4, max=10))
-def generate_image(prompt: str, output_dir: str, filename: str) -> str:
+@with_retry
+def generate_image(prompt: str, destination: Path, *, client=None) -> Path:
+    """Generate one image for `prompt` and save it to `destination`.
+
+    Writes through a temporary file and renames on success, so a failure can
+    never leave a truncated PNG behind for the validation step to find.
     """
-    Generate an image using OpenAI's image generation API and save it to the specified directory.
-    Returns the path to the saved image.
-    """
-    # Create the output directory if it doesn't exist
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
-    
-    try:
-        client = get_open_ai_client()
+    client = client or get_open_ai_client()
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
 
-        # Generate the image
-        response = client.images.generate(
-            model="gpt-image-1",
-            prompt=prompt,
-            size="1024x1024",
-            n=1,
-            quality="medium"
-        )
-        
-        if not response.data or not response.data[0]:
-            raise ValueError("No image data returned from API.")
-        b64_json = response.data[0].b64_json
-        if not b64_json:
-            raise ValueError("No image data returned from API.")
-        image_bytes = base64.b64decode(b64_json)
+    response = client.images.generate(
+        model=config.IMAGE_MODEL,
+        prompt=prompt,
+        size=config.IMAGE_SIZE,
+        n=1,
+        quality=config.IMAGE_QUALITY,
+    )
 
-        image_path = os.path.join(output_dir, f"{filename}.png")
-        with open(image_path, "wb") as f:
-            f.write(image_bytes)
-        
-        return image_path
-    except Exception as e:
-        print(f"Error generating image with prompt '{prompt}': {str(e)}")
-        raise  # Re-raise the exception to be handled by the retry decorator
+    if not response.data or not response.data[0] or not response.data[0].b64_json:
+        raise ValueError(f"No image data returned from API for prompt: {prompt!r}")
+
+    image_bytes = base64.b64decode(response.data[0].b64_json)
+
+    temporary = destination.with_suffix(destination.suffix + ".part")
+    temporary.write_bytes(image_bytes)
+    os.replace(temporary, destination)
+
+    return destination
