@@ -1420,7 +1420,7 @@ This is the single largest wall-clock win. Fifteen images currently run strictly
 - Consumes: `config.IMAGE_MODEL/IMAGE_SIZE/IMAGE_QUALITY`; `models.Item`; `utils.paths.image_path`; `utils.openai_support.with_retry`, `run_all`, `Job`
 - Produces: `generate_image(prompt: str, destination: Path, *, client=None) -> Path` in `utils.py`; `image_jobs(items: Sequence[Item], *, client=None) -> list[Job]` and `generate_images(items, *, client=None) -> list[TaskResult]` in `generate_images.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 `image_jobs` returning a list of un-run callables is what lets `pipeline.py` merge image and audio work into one capped pool — and it makes the fan-out testable without running anything.
 
@@ -1563,12 +1563,12 @@ def test_jobs_run_correctly_through_the_shared_runner(tmp_path, monkeypatch):
     assert all(r.ok for r in results)
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `./venv/bin/pytest tests/test_generate_images.py -v`
 Expected: FAIL — `ImportError: cannot import name 'image_jobs'`
 
-- [ ] **Step 3: Rewrite `scripts/ai/generate_images/utils.py`**
+- [x] **Step 3: Rewrite `scripts/ai/generate_images/utils.py`**
 
 The write is done to a temp file and then atomically renamed, so a crash mid-write cannot leave a truncated PNG that the validation step would happily accept.
 
@@ -1615,7 +1615,7 @@ def generate_image(prompt: str, destination: Path, *, client=None) -> Path:
     return destination
 ```
 
-- [ ] **Step 4: Rewrite `scripts/ai/generate_images/generate_images.py`**
+- [x] **Step 4: Rewrite `scripts/ai/generate_images/generate_images.py`**
 
 ```python
 """Fan every item's image prompts out into independent, parallelizable jobs."""
@@ -1657,16 +1657,16 @@ def generate_images(items: Sequence[Item], *, client=None) -> list[TaskResult]:
         return run_all(executor, image_jobs(items, client=client))
 ```
 
-- [ ] **Step 5: Create `scripts/ai/generate_images/__init__.py`**
+- [x] **Step 5: Create `scripts/ai/generate_images/__init__.py`**
 
 Create it as an empty file.
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `./venv/bin/pytest tests/test_generate_images.py -v`
 Expected: PASS, 12 passed
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A
