@@ -125,4 +125,5 @@ def generate_list(topic: str, num_items: int = 5, *, client=None) -> list[Item]:
 
     client = client or get_open_ai_client()
     content = _request_items(client, topic, num_items)
-    return parse_items(content or "")
+    # Read the count now, not at import time, so a per-run override applies.
+    return parse_items(content or "", expected_prompts=config.IMAGE_PROMPTS_PER_ITEM)

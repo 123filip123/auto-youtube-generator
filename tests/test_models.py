@@ -115,3 +115,13 @@ def test_save_creates_parent_directories(tmp_path):
 def test_items_to_json_is_readable():
     text = items_to_json([Item("Dodo", "A bird.", ("a", "b", "c"))])
     assert "\n" in text  # indented, not one long line
+
+
+def test_parse_items_rejects_an_empty_image_prompt_list():
+    # all([]) is True, so an empty list used to slip through and then break
+    # the renderer, which needs at least one image per item.
+    payload = {
+        "items": [{"title": "Dodo", "description": "A bird.", "image_prompts": []}]
+    }
+    with pytest.raises(InvalidItemsError, match="image_prompts"):
+        parse_items(payload, expected_prompts=None)

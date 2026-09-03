@@ -104,3 +104,12 @@ def test_does_not_write_to_disk():
     # Persistence is the pipeline's job, not this stage's.
     client = FakeClient(json.dumps(build_payload()))
     generate_list("extinct animals", 3, client=client)
+
+
+def test_validates_against_the_current_prompt_count(monkeypatch):
+    # The count must be read when generate_list runs, not when it is imported,
+    # so a per-run override applies.
+    monkeypatch.setattr("config.IMAGE_PROMPTS_PER_ITEM", 2)
+    client = FakeClient(json.dumps(build_payload(count=1, prompts=2)))
+    items = generate_list("birds", 1, client=client)
+    assert len(items[0].image_prompts) == 2

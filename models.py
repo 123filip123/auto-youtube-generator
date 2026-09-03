@@ -93,8 +93,10 @@ def parse_items(
         description = _required_text(payload, "description", position)
 
         prompts = payload.get("image_prompts")
-        if not isinstance(prompts, list) or not all(
-            isinstance(p, str) and p.strip() for p in prompts
+        if (
+            not isinstance(prompts, list)
+            or not prompts
+            or not all(isinstance(p, str) and p.strip() for p in prompts)
         ):
             raise InvalidItemsError(
                 f"item {position} is missing a usable 'image_prompts' list"
