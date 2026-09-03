@@ -1,6 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 
 import AssetList from "@/components/AssetList";
+import ItemEditor from "@/components/ItemEditor";
 import LogPanel from "@/components/LogPanel";
 import StageProgress from "@/components/StageProgress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -50,6 +51,17 @@ export default function RunPage() {
       </div>
 
       <StageProgress run={run} />
+
+      {run.status === "awaiting_review" && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Review the generated items</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ItemEditor runId={run.id} items={run.items} onApproved={refresh} />
+          </CardContent>
+        </Card>
+      )}
 
       {!finished && (
         <p className="text-xs text-muted-foreground">
