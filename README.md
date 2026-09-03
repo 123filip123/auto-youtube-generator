@@ -105,6 +105,52 @@ python main.py --topic "Top 5 Extinct Animals" --items 5
 Output lands in `outputs/`, and a complete copy of the run is archived to
 `generated_data/<topic-slug>/`.
 
+### Run the Web UI
+
+The web UI is two processes: the FastAPI backend and the Vite dev server.
+
+**Terminal 1 — backend (must be started from the repository root):**
+
+```bash
+uvicorn api.app:app --port 8000
+```
+
+**Terminal 2 — frontend:**
+
+```bash
+cd frontend
+npm install   # first time only
+npm run dev
+```
+
+Open <http://localhost:5173>. The dev server proxies `/api` and `/media` to the
+backend, so there is nothing else to configure.
+
+The UI can:
+
+- start a run and watch it stage by stage, with per-asset success and failure
+- pause after the item list is generated so you can edit titles, descriptions
+  and image prompts before any images or narration are paid for
+- override any of the tunables listed under [Configuration](#configuration) for
+  a single run, without editing `.env`
+- browse every archived run in `generated_data/` with its images, narration and
+  video
+
+**Only one run can be active at a time.** `outputs/` is a single shared
+workspace with fixed filenames, so starting a second run while one is in flight
+returns a conflict. Cancelling stops the run at the next stage boundary; work
+already in flight — an OpenAI batch or a video render — finishes first.
+
+Run history lives in memory. Restarting the backend clears it —
+`generated_data/` is the durable record.
+
+To serve the UI from the backend alone (no Vite process), build it first; the
+backend serves `frontend/dist/` at `/` when that directory exists:
+
+```bash
+cd frontend && npm run build
+```
+
 ---
 
 ## Output
@@ -152,6 +198,14 @@ during quick iteration:
 
 ```bash
 pytest -m "not slow"
+```
+
+Frontend tests:
+
+```bash
+cd frontend
+npm test        # vitest
+npm run build   # type-check and build
 ```
 
 Note that `moviepy` is pinned to `1.0.3` and requires `decorator==4.4.2`.
