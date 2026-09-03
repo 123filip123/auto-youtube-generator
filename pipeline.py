@@ -1,8 +1,13 @@
-"""Stage orchestration for the video generation pipeline."""
+"""Stage orchestration for the video generation pipeline.
+
+Each stage is callable on its own so a caller can stop between stages — the
+web UI pauses after the list stage to let a human edit the items. `run_pipeline`
+composes all five and is what the CLI uses.
+"""
 
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Sequence
+from typing import Callable, Sequence
 
 import config
 from models import Item, save_items
@@ -18,7 +23,7 @@ from scripts.non_ai.generate_video_short.generate_video_short import (
 from scripts.non_ai.save_to_generated_data.save_to_generated_data import (
     save_to_generated_data,
 )
-from utils.openai_support import describe_failures, run_all
+from utils.openai_support import TaskResult, describe_failures, run_all
 from utils.paths import (
     audio_path,
     ensure_output_dirs,
@@ -26,6 +31,11 @@ from utils.paths import (
     list_items_path,
     titled_image_path,
 )
+
+TOTAL_STAGES = 5
+
+Log = Callable[[str], None]
+AssetCallback = Callable[[TaskResult], None]
 
 
 class PipelineError(RuntimeError):
@@ -70,48 +80,117 @@ def _fail(stage: str, paths: Sequence[Path]) -> None:
     )
 
 
-def run_pipeline(topic: str, num_items: int, *, client=None) -> Path:
-    """Run every stage end to end and return the path to the finished video."""
-    ensure_output_dirs()
+def media_job_total(items: Sequence[Item]) -> int:
+    """One narration per item plus one image per prompt."""
+    return len(items) + sum(len(item.image_prompts) for item in items)
 
-    print(f"\n[1/5] Generating {num_items} items for '{topic}'...")
+
+def titled_job_total(items: Sequence[Item]) -> int:
+    """One titled frame per generated image."""
+    return sum(len(item.image_prompts) for item in items)
+
+
+def generate_items_stage(
+    topic: str,
+    num_items: int,
+    *,
+    client=None,
+    log: Log = print,
+) -> list[Item]:
+    """Stage 1: ask the model for the item list and save it to disk."""
+    ensure_output_dirs()
+    log(f"Generating {num_items} items for '{topic}'...")
     items = generate_list(topic, num_items, client=client)
     save_items(items, list_items_path())
     for number, item in enumerate(items, start=1):
-        print(f"  {number}. {item.title}")
+        log(f"  {number}. {item.title}")
+    return items
 
-    total_jobs = len(items) + sum(len(item.image_prompts) for item in items)
-    print(
-        f"\n[2/5] Generating {total_jobs} media assets "
+
+def generate_media_stage(
+    items: Sequence[Item],
+    *,
+    client=None,
+    log: Log = print,
+    on_asset: AssetCallback | None = None,
+) -> None:
+    """Stage 2: generate every image and narration, then verify all of them."""
+    ensure_output_dirs()
+    total = media_job_total(items)
+    log(
+        f"Generating {total} media assets "
         f"({config.MAX_CONCURRENT_REQUESTS} at a time)..."
     )
     # One shared pool, so image and audio work interleaves under a single cap.
     with ThreadPoolExecutor(max_workers=config.MAX_CONCURRENT_REQUESTS) as executor:
         jobs = image_jobs(items, client=client) + audio_jobs(items, client=client)
-        results = run_all(executor, jobs)
+        results = run_all(executor, jobs, on_done=on_asset)
 
     failures = describe_failures(results)
     if failures:
-        print(f"\n{failures}")
+        log(failures)
 
     missing = missing_media(items)
     if missing:
         _fail("Media generation", missing)
 
-    print("\n[3/5] Rendering titled images...")
-    titled_results = create_titled_images_for_items_short(items)
-    titled_failures = describe_failures(titled_results)
-    if titled_failures:
-        print(f"\n{titled_failures}")
+
+def render_titled_images_stage(
+    items: Sequence[Item],
+    *,
+    log: Log = print,
+    on_asset: AssetCallback | None = None,
+) -> None:
+    """Stage 3: compose each image onto a blurred backdrop with its title."""
+    log("Rendering titled images...")
+    results = create_titled_images_for_items_short(items, on_done=on_asset)
+
+    failures = describe_failures(results)
+    if failures:
+        log(failures)
 
     missing = missing_titled_images(items)
     if missing:
         _fail("Titled image rendering", missing)
 
-    print("\n[4/5] Assembling video...")
-    video = generate_video_short(items)
 
-    print("\n[5/5] Archiving...")
-    save_to_generated_data(topic, items)
+def render_video_stage(items: Sequence[Item], *, log: Log = print) -> Path:
+    """Stage 4: assemble the titled images and narration into the final video."""
+    log("Assembling video...")
+    return generate_video_short(items)
+
+
+def archive_stage(topic: str, items: Sequence[Item], *, log: Log = print) -> Path:
+    """Stage 5: copy the whole run into `generated_data/<topic-slug>/`."""
+    log("Archiving...")
+    return save_to_generated_data(topic, items)
+
+
+def _banner(step: int) -> Log:
+    """A logger that stamps a `[n/5]` banner onto the stage's first line only.
+
+    Keeps the CLI's output byte-identical now that stages own their headlines.
+    """
+    pending = [True]
+
+    def log(message: str) -> None:
+        if pending[0]:
+            pending[0] = False
+            print(f"\n[{step}/{TOTAL_STAGES}] {message}")
+        else:
+            print(message)
+
+    return log
+
+
+def run_pipeline(topic: str, num_items: int, *, client=None) -> Path:
+    """Run every stage end to end and return the path to the finished video."""
+    ensure_output_dirs()
+
+    items = generate_items_stage(topic, num_items, client=client, log=_banner(1))
+    generate_media_stage(items, client=client, log=_banner(2))
+    render_titled_images_stage(items, log=_banner(3))
+    video = render_video_stage(items, log=_banner(4))
+    archive_stage(topic, items, log=_banner(5))
 
     return video

@@ -63,3 +63,68 @@ def test_missing_titled_images_reports_gaps(tmp_path, monkeypatch):
 
 def test_pipeline_error_is_a_runtime_error():
     assert issubclass(PipelineError, RuntimeError)
+
+def test_media_job_total_counts_audio_plus_every_image():
+    from pipeline import media_job_total
+
+    items = [Item("A", "d", ("p1", "p2")), Item("B", "d", ("p1",))]
+    # 2 narrations + 3 images
+    assert media_job_total(items) == 5
+
+
+def test_titled_job_total_counts_every_image():
+    from pipeline import titled_job_total
+
+    items = [Item("A", "d", ("p1", "p2")), Item("B", "d", ("p1",))]
+    assert titled_job_total(items) == 3
+
+
+def test_generate_items_stage_saves_the_list_and_logs(tmp_path, monkeypatch):
+    import json
+
+    from pipeline import generate_items_stage
+    from utils.paths import list_items_path
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "pipeline.generate_list",
+        lambda topic, num_items, client=None: [Item("Dodo", "A bird.", ("a", "b", "c"))],
+    )
+
+    lines = []
+    items = generate_items_stage("birds", 1, log=lines.append)
+
+    assert [item.title for item in items] == ["Dodo"]
+    saved = json.loads(list_items_path().read_text())
+    assert saved["items"][0]["title"] == "Dodo"
+    assert any("Dodo" in line for line in lines)
+
+
+def test_generate_media_stage_raises_when_an_asset_is_missing(tmp_path, monkeypatch):
+    from pipeline import generate_media_stage
+
+    monkeypatch.chdir(tmp_path)
+    ensure_output_dirs()
+    monkeypatch.setattr("pipeline.image_jobs", lambda items, client=None: [])
+    monkeypatch.setattr("pipeline.audio_jobs", lambda items, client=None: [])
+
+    with pytest.raises(PipelineError, match="Media generation"):
+        generate_media_stage(one_item(), log=lambda _: None)
+
+
+def test_generate_media_stage_forwards_asset_results(tmp_path, monkeypatch):
+    from pipeline import generate_media_stage
+
+    monkeypatch.chdir(tmp_path)
+    ensure_output_dirs()
+    items = one_item()
+    write_media(items)
+
+    monkeypatch.setattr(
+        "pipeline.image_jobs", lambda items, client=None: [("image 1", lambda: None)]
+    )
+    monkeypatch.setattr("pipeline.audio_jobs", lambda items, client=None: [])
+
+    seen = []
+    generate_media_stage(items, log=lambda _: None, on_asset=seen.append)
+    assert [r.label for r in seen] == ["image 1"]
