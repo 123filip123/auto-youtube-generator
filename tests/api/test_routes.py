@@ -163,3 +163,25 @@ def test_archives_are_listed_and_readable(client, tmp_path):
     detail = client.get("/api/archives/birds").json()
     assert detail["items"][0]["title"] == "Dodo"
     assert client.get("/api/archives/missing").status_code == 404
+
+
+def test_a_built_frontend_is_served_with_an_spa_fallback(tmp_path, monkeypatch):
+    # Client-side routes must survive a refresh or a pasted deep link, which
+    # plain StaticFiles does not do — it 404s anything but an existing file.
+    monkeypatch.chdir(tmp_path)
+    dist = tmp_path / "frontend" / "dist"
+    dist.mkdir(parents=True)
+    (dist / "index.html").write_text("<div id='root'></div>")
+    (dist / "favicon.svg").write_text("<svg/>")
+
+    with TestClient(create_app()) as http:
+        assert http.get("/").status_code == 200
+        for route in ("/archives", "/config", "/runs/abc123"):
+            response = http.get(route)
+            assert response.status_code == 200, route
+            assert "id='root'" in response.text
+
+        # Real files still win, and the API is untouched.
+        assert http.get("/favicon.svg").text == "<svg/>"
+        assert http.get("/api/health").json() == {"status": "ok"}
+        assert http.get("/api/runs/nope").status_code == 404
