@@ -9,7 +9,7 @@ Two things live here because every stage needs both:
    results in submission order with per-job errors captured rather than raised.
 """
 
-from concurrent.futures import Executor
+from concurrent.futures import Executor, as_completed
 from dataclasses import dataclass
 from typing import Any, Callable, Sequence
 
@@ -64,22 +64,37 @@ class TaskResult:
 Job = tuple[str, Callable[[], Any]]
 
 
-def run_all(executor: Executor, jobs: Sequence[Job]) -> list[TaskResult]:
+def run_all(
+    executor: Executor,
+    jobs: Sequence[Job],
+    *,
+    on_done: Callable[[TaskResult], None] | None = None,
+) -> list[TaskResult]:
     """Run every job on `executor`, returning results in submission order.
 
     A failing job does not stop the others; its exception is captured on the
     corresponding `TaskResult`. Passing a shared executor lets several stages
     interleave their work under one global concurrency cap.
+
+    `on_done` is invoked in *completion* order, which is what a progress
+    display wants; the returned list stays in submission order, which is what
+    every existing caller expects.
     """
     submitted = [(label, executor.submit(fn)) for label, fn in jobs]
+    labels = {future: label for label, future in submitted}
 
-    results: list[TaskResult] = []
-    for label, future in submitted:
+    outcomes: dict[Any, TaskResult] = {}
+    for future in as_completed(labels):
+        label = labels[future]
         try:
-            results.append(TaskResult(label, value=future.result()))
+            result = TaskResult(label, value=future.result())
         except BaseException as exc:  # noqa: BLE001 - reported, not swallowed
-            results.append(TaskResult(label, error=exc))
-    return results
+            result = TaskResult(label, error=exc)
+        outcomes[future] = result
+        if on_done is not None:
+            on_done(result)
+
+    return [outcomes[future] for _, future in submitted]
 
 
 def describe_failures(results: Sequence[TaskResult]) -> str:

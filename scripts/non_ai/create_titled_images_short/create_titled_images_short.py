@@ -31,7 +31,9 @@ def titled_image_jobs(items: Sequence[Item]) -> list[Job]:
 
 def create_titled_images_for_items_short(
     items: Sequence[Item],
+    *,
+    on_done=None,
 ) -> list[TaskResult]:
     """Render every titled image. Pillow releases the GIL, so threads help."""
     with ThreadPoolExecutor(max_workers=config.MAX_CONCURRENT_REQUESTS) as executor:
-        return run_all(executor, titled_image_jobs(items))
+        return run_all(executor, titled_image_jobs(items), on_done=on_done)

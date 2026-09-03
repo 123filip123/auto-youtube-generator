@@ -145,3 +145,26 @@ def test_describe_failures_lists_each_failure():
 
 def test_describe_failures_is_empty_when_all_succeeded():
     assert describe_failures([TaskResult("a", value=1)]) == ""
+
+
+def test_run_all_reports_each_result_as_it_finishes():
+    seen = []
+    jobs = [("a", lambda: 1), ("b", lambda: 2), ("c", lambda: 3)]
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        results = run_all(executor, jobs, on_done=seen.append)
+
+    assert [r.label for r in results] == ["a", "b", "c"]
+    assert sorted(r.label for r in seen) == ["a", "b", "c"]
+
+
+def test_run_all_reports_failures_to_the_callback():
+    def boom():
+        raise ValueError("nope")
+
+    seen = []
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        run_all(executor, [("bad", boom)], on_done=seen.append)
+
+    assert len(seen) == 1
+    assert not seen[0].ok
+    assert isinstance(seen[0].error, ValueError)
