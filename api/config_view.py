@@ -24,7 +24,9 @@ class OverridableField:
 
 
 OVERRIDABLE: tuple[OverridableField, ...] = (
-    OverridableField("TEXT_MODEL", "str", None, "Generates the item list."),
+    OverridableField(
+        "TEXT_MODEL", "str", None, "Writes the script and the drawing prompts."
+    ),
     OverridableField("TTS_MODEL", "str", None, "Generates the narration."),
     OverridableField("TTS_VOICE", "str", None, "Narration voice."),
     OverridableField("IMAGE_MODEL", "str", None, "Generates the images."),
@@ -39,11 +41,10 @@ OVERRIDABLE: tuple[OverridableField, ...] = (
         "STORYBOARD_STYLE", "str", None, "The drawing style every frame shares."
     ),
     OverridableField(
-        "IMAGE_PROMPTS_PER_ITEM",
+        "TARGET_VIDEO_SECONDS",
         "int",
         None,
-        "Story beats per item. Sets both the frame count and, at one sentence "
-        "per beat, the narration length.",
+        "Target spoken length. Section and image counts follow from it.",
     ),
     OverridableField("MAX_CONCURRENT_REQUESTS", "int", None, "Parallel OpenAI calls."),
     OverridableField("MAX_RETRIES", "int", None, "Attempts per call."),

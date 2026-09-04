@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, approveItems, createRun, getRun, listArchives } from "./api";
+import { ApiError, approveScript, createRun, getRun, listArchives } from "./api";
 
 function mockFetch(status: number, body: unknown) {
   const fetchMock = vi.fn().mockResolvedValue({
@@ -22,8 +22,8 @@ describe("api client", () => {
     const fetchMock = mockFetch(201, { id: "abc", topic: "Birds" });
     const run = await createRun({
       topic: "Birds",
-      num_items: 3,
-      review_items: true,
+      target_seconds: 85,
+      review_script: true,
       overrides: {},
     });
 
@@ -33,8 +33,8 @@ describe("api client", () => {
     expect(init.method).toBe("POST");
     expect(JSON.parse(init.body)).toEqual({
       topic: "Birds",
-      num_items: 3,
-      review_items: true,
+      target_seconds: 85,
+      review_script: true,
       overrides: {},
     });
   });
@@ -56,18 +56,19 @@ describe("api client", () => {
     await expect(getRun("abc")).rejects.toThrow("topic must not be blank");
   });
 
-  it("sends approved items under an items key", async () => {
+  it("sends the approved script under a script key", async () => {
     const fetchMock = mockFetch(200, { id: "abc" });
-    const item = {
+    const script = {
+      topic: "Birds",
       title: "Moa",
-      description: "d",
       style: "A tall bird.",
-      beats: [{ narration: "d", prompt: "x" }],
-      image_prompts: ["x"],
+      sections: [
+        { label: "HOOK", narration: "d", prompts: ["x"], start: 0, end: 0 },
+      ],
     };
-    await approveItems("abc", [item]);
+    await approveScript("abc", script);
     expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({
-      items: [item],
+      script,
     });
   });
 

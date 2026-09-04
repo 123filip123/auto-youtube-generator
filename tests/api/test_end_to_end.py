@@ -1,9 +1,9 @@
 """One whole run driven through the HTTP API, with no network calls.
 
 This is the automated stand-in for driving the UI by hand: it exercises the
-real stages — Pillow titled-image rendering, a real moviepy encode, real
-archiving — behind the same endpoints the frontend calls. Only the OpenAI
-client is faked.
+real stages — real image/audio generation calls (faked at the OpenAI client),
+real frame composition, a real moviepy encode, real archiving — behind the
+same endpoints the frontend calls. Only the OpenAI client is faked.
 """
 
 import base64
@@ -18,22 +18,30 @@ from PIL import Image
 
 import config
 from api.app import create_app
-from utils.paths import audio_path, image_path, titled_image_path, video_output_path
+from utils.paths import (
+    composed_image_path,
+    section_audio_path,
+    section_image_path,
+    video_output_path,
+)
 
-ITEMS_JSON = json.dumps(
+SCRIPT_JSON = json.dumps(
     {
-        "items": [
-            {
-                "title": "Dodo",
-                "description": "A flightless bird. It is extinct.",
-                "image_prompts": ["a dodo"],
-            },
-            {
-                "title": "Moa",
-                "description": "A tall flightless bird. Also extinct.",
-                "image_prompts": ["a moa"],
-            },
-        ]
+        "title": "Wolves Domesticated Themselves",
+        "sections": [
+            {"label": "HOOK", "narration": "Your dog's ancestor could have killed you."},
+            {"label": "PAYOFF", "narration": "Wolves chose us as much as we chose them."},
+        ],
+    }
+)
+
+PROMPTS_JSON = json.dumps(
+    {
+        "style": "A lean grey-blue wolf with amber eyes.",
+        "sections": [
+            {"label": "HOOK", "prompts": ["a snarling wolf", "a goofy dog"]},
+            {"label": "PAYOFF", "prompts": ["a wolf and a person side by side"]},
+        ],
     }
 )
 
@@ -61,7 +69,12 @@ def _silent_mp3() -> bytes:
 
 
 class FakeOpenAI:
-    """Answers the three calls the pipeline makes, with usable payloads."""
+    """Answers the calls the pipeline makes, with usable payloads.
+
+    `chat.completions.create` answers the script (call 1) then the prompts
+    (every call after) — a run only ever makes exactly those two chat calls,
+    one per script/prompts stage.
+    """
 
     def __init__(self, audio: bytes) -> None:
         self.chat = SimpleNamespace(
@@ -70,17 +83,20 @@ class FakeOpenAI:
         self.images = SimpleNamespace(generate=self._image, edit=self._edit)
         self.audio = SimpleNamespace(speech=SimpleNamespace(create=self._speech))
         self._audio = audio
+        self._chat_calls = 0
         self.edits = []
 
     def _chat(self, **_kwargs):
-        message = SimpleNamespace(content=ITEMS_JSON)
+        self._chat_calls += 1
+        content = SCRIPT_JSON if self._chat_calls == 1 else PROMPTS_JSON
+        message = SimpleNamespace(content=content)
         return SimpleNamespace(choices=[SimpleNamespace(message=message)])
 
     def _image(self, **_kwargs):
         return SimpleNamespace(data=[SimpleNamespace(b64_json=_png_b64())])
 
     def _edit(self, **kwargs):
-        """Every frame after the first continues the item's anchor frame."""
+        """Every shot after a section's first continues its anchor frame."""
         self.edits.append(kwargs["image"][0].read())
         return SimpleNamespace(data=[SimpleNamespace(b64_json=_png_b64())])
 
@@ -96,8 +112,6 @@ def test_a_whole_run_through_the_api(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "VIDEO_WIDTH", 216)
     monkeypatch.setattr(config, "VIDEO_HEIGHT", 384)
     monkeypatch.setattr(config, "VIDEO_FPS", 6)
-    monkeypatch.setattr(config, "TITLE_FONT_SIZE", 24)
-    monkeypatch.setattr(config, "TITLE_GAP_BELOW_IMAGE", 40)
 
     client = FakeOpenAI(_silent_mp3())
 
@@ -107,32 +121,46 @@ def test_a_whole_run_through_the_api(tmp_path, monkeypatch):
         created = http.post(
             "/api/runs",
             json={
-                "topic": "Top 2 Extinct Birds",
-                "num_items": 2,
-                "review_items": True,
+                "topic": "Top Wolf Facts",
+                # The floor, to keep the render tiny.
+                "target_seconds": 15,
+                "review_script": True,
                 # Exercised as a real per-run override.
-                "overrides": {"IMAGE_PROMPTS_PER_ITEM": 1, "IMAGE_QUALITY": "low"},
+                "overrides": {"IMAGE_QUALITY": "low"},
             },
         )
         assert created.status_code == 201, created.text
         run_id = created.json()["id"]
 
-        # 1. The run pauses for review with both generated items.
+        # 1. The run pauses for review with the generated, prompt-filled script.
         store.wait_for_status(run_id, "awaiting_review")
         paused = http.get(f"/api/runs/{run_id}").json()
-        assert [item["title"] for item in paused["items"]] == ["Dodo", "Moa"]
+        sections = paused["script"]["sections"]
+        assert [section["label"] for section in sections] == ["HOOK", "PAYOFF"]
+        assert sections[0]["prompts"] == ["a snarling wolf", "a goofy dog"]
 
-        # 2. Edit a title and drop the second item, the way the UI does.
+        # 2. Edit the narration and drop the second section, the way the UI does.
         approved = http.post(
-            f"/api/runs/{run_id}/items",
+            f"/api/runs/{run_id}/script",
             json={
-                "items": [
-                    {
-                        "title": "Great Auk",
-                        "description": "A flightless seabird. It is extinct.",
-                        "image_prompts": ["a great auk", "a great auk in a hat"],
-                    }
-                ]
+                "script": {
+                    "topic": "Top Wolf Facts",
+                    "title": "Wolves Chose Us",
+                    "style": "A lean grey-blue wolf with amber eyes.",
+                    "sections": [
+                        {
+                            "label": "HOOK",
+                            "narration": (
+                                "Your dog's ancestor could have killed you. "
+                                "Wolves chose us as much as we chose them."
+                            ),
+                            "prompts": [
+                                "a snarling wolf",
+                                "a wolf and a person side by side",
+                            ],
+                        }
+                    ],
+                }
             },
         )
         assert approved.status_code == 200, approved.text
@@ -141,20 +169,19 @@ def test_a_whole_run_through_the_api(tmp_path, monkeypatch):
         store.wait_for_idle(timeout=180)
         detail = http.get(f"/api/runs/{run_id}").json()
         assert detail["status"] == "completed", detail["error"]
-        assert [item["title"] for item in detail["items"]] == ["Great Auk"]
+        assert [s["label"] for s in detail["script"]["sections"]] == ["HOOK"]
 
-        # The edited item asked for two prompts, so two images were generated
-        # even though the run was started with IMAGE_PROMPTS_PER_ITEM=1.
-        assert image_path(1, 1).stat().st_size > 0
-        assert image_path(1, 2).stat().st_size > 0
+        # The edited section asked for two prompts, so two images were generated.
+        assert section_image_path(1, 1).stat().st_size > 0
+        assert section_image_path(1, 2).stat().st_size > 0
 
-        # The second frame went through the follow-up wave, referencing the
-        # anchor frame rather than being drawn from its prompt alone.
+        # The second shot went through the continuation call, referencing the
+        # first shot rather than being drawn from its prompt alone.
         assert len(client.edits) == 1
-        assert client.edits[0] == image_path(1, 1).read_bytes()
-        assert audio_path(1).stat().st_size > 0
-        assert titled_image_path(1, 1).stat().st_size > 0
-        assert titled_image_path(1, 2).stat().st_size > 0
+        assert client.edits[0] == section_image_path(1, 1).read_bytes()
+        assert section_audio_path(1).stat().st_size > 0
+        assert composed_image_path(1, 1).stat().st_size > 0
+        assert composed_image_path(1, 2).stat().st_size > 0
         assert video_output_path().stat().st_size > 0
 
         # 4. The video is served over the media mount.
@@ -164,23 +191,17 @@ def test_a_whole_run_through_the_api(tmp_path, monkeypatch):
         assert http.get(detail["video_url"]).status_code == 200
 
         # 5. The archive is complete and readable through the API.
-        assert detail["archive_slug"] == "top_2_extinct_birds"
+        assert detail["archive_slug"] == "top_wolf_facts"
         archive = http.get(f"/api/archives/{detail['archive_slug']}").json()
         assert archive["video_url"] is not None
-        (archived_item,) = archive["items"]
-        assert archived_item["title"] == "Great Auk"
-        assert len(archived_item["image_urls"]) == 2
-        assert len(archived_item["titled_image_urls"]) == 2
-        assert archived_item["audio_url"] is not None
-        for url in [archive["video_url"], *archived_item["image_urls"]]:
+        assert archive["title"] == "Wolves Chose Us"
+        (archived_section,) = archive["sections"]
+        assert archived_section["label"] == "HOOK"
+        assert len(archived_section["image_urls"]) == 2
+        assert len(archived_section["composed_image_urls"]) == 2
+        assert archived_section["audio_url"] is not None
+        for url in [archive["video_url"], *archived_section["image_urls"]]:
             assert http.get(url).status_code == 200, url
 
         # 6. The override was reverted once the run finished.
         assert config.IMAGE_QUALITY == "medium"
-
-        # 7. A second run is allowed now that the first is terminal.
-        assert (
-            http.post("/api/runs", json={"topic": "Fish", "num_items": 1}).status_code
-            == 201
-        )
-        store.wait_for_idle(timeout=180)

@@ -10,40 +10,45 @@ from pydantic import BaseModel, Field, field_validator
 
 from api.config_view import OVERRIDABLE, effective_config
 from api.runs import Run
-from models import Item
+from models import Script
 
 
-class BeatPayload(BaseModel):
-    narration: str
-    prompt: str
+class SectionPayload(BaseModel):
+    """One section on the wire.
 
-
-class ItemPayload(BaseModel):
-    """One item on the wire.
-
-    `description` is output-only: `parse_items` recomputes it from the beat
-    narrations, so a client that edits a narration cannot leave a stale script
-    behind. `image_prompts` is kept so a client holding an item in the
-    pre-storyboard shape can still submit it.
+    `start` and `end` are output-only: they are derived from narration length
+    and later from measured audio, so a client that edits them is ignored.
     """
 
-    title: str
-    description: str = ""
+    label: str
+    narration: str
+    prompts: list[str] = Field(default_factory=list)
+    start: float = 0.0
+    end: float = 0.0
+
+
+class ScriptPayload(BaseModel):
+    topic: str = ""
+    title: str = ""
     style: str = ""
-    beats: list[BeatPayload] = Field(default_factory=list)
-    image_prompts: list[str] = Field(default_factory=list)
+    sections: list[SectionPayload] = Field(default_factory=list)
 
     @classmethod
-    def from_item(cls, item: Item) -> "ItemPayload":
+    def from_script(cls, script: Script) -> "ScriptPayload":
         return cls(
-            title=item.title,
-            description=item.description,
-            style=item.style,
-            beats=[
-                BeatPayload(narration=beat.narration, prompt=beat.prompt)
-                for beat in item.beats
+            topic=script.topic,
+            title=script.title,
+            style=script.style,
+            sections=[
+                SectionPayload(
+                    label=section.label,
+                    narration=section.narration,
+                    prompts=list(section.prompts),
+                    start=section.start,
+                    end=section.end,
+                )
+                for section in script.sections
             ],
-            image_prompts=list(item.image_prompts),
         )
 
 
@@ -56,16 +61,16 @@ class AssetStatusPayload(BaseModel):
 class RunSummaryPayload(BaseModel):
     id: str
     topic: str
-    num_items: int
+    target_seconds: int
     status: str
     created_at: str
     finished_at: str | None = None
 
 
 class RunDetailPayload(RunSummaryPayload):
-    review_items: bool
+    review_script: bool
     overrides: dict[str, Any]
-    items: list[ItemPayload]
+    script: ScriptPayload
     assets: list[AssetStatusPayload]
     asset_total: int
     logs: list[str]
@@ -76,8 +81,8 @@ class RunDetailPayload(RunSummaryPayload):
 
 class CreateRunRequest(BaseModel):
     topic: str
-    num_items: int = Field(ge=1, le=50)
-    review_items: bool = False
+    target_seconds: int = Field(default=85, ge=15, le=180)
+    review_script: bool = False
     overrides: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("topic")
@@ -89,8 +94,8 @@ class CreateRunRequest(BaseModel):
         return text
 
 
-class ApproveItemsRequest(BaseModel):
-    items: list[ItemPayload] = Field(min_length=1)
+class ApproveScriptRequest(BaseModel):
+    script: ScriptPayload
 
 
 class ConfigFieldPayload(BaseModel):
@@ -107,28 +112,29 @@ class ConfigPayload(BaseModel):
 
 class ArchiveSummaryPayload(BaseModel):
     slug: str
-    item_count: int
+    section_count: int
     image_count: int
     audio_count: int
     has_video: bool
     modified_at: str
 
 
-class ArchiveItemPayload(BaseModel):
-    title: str
-    description: str
-    style: str = ""
-    beats: list[BeatPayload] = Field(default_factory=list)
-    image_prompts: list[str]
+class ArchiveSectionPayload(BaseModel):
+    label: str
+    narration: str
+    prompts: list[str]
     image_urls: list[str]
-    titled_image_urls: list[str]
+    composed_image_urls: list[str]
     audio_url: str | None = None
 
 
 class ArchiveDetailPayload(BaseModel):
     slug: str
+    topic: str
+    title: str
+    style: str = ""
     video_url: str | None = None
-    items: list[ArchiveItemPayload]
+    sections: list[ArchiveSectionPayload]
 
 
 def config_payload() -> ConfigPayload:
@@ -150,7 +156,7 @@ def run_summary(run: Run) -> RunSummaryPayload:
     return RunSummaryPayload(
         id=run.id,
         topic=run.topic,
-        num_items=run.num_items,
+        target_seconds=run.target_seconds,
         status=run.status,
         created_at=run.created_at,
         finished_at=run.finished_at,
@@ -169,9 +175,9 @@ def run_detail(run: Run) -> RunDetailPayload:
 
     return RunDetailPayload(
         **run_summary(run).model_dump(),
-        review_items=run.review_items,
+        review_script=run.review_script,
         overrides=run.overrides,
-        items=[ItemPayload.from_item(item) for item in run.items],
+        script=ScriptPayload.from_script(run.script),
         assets=[
             AssetStatusPayload(label=asset.label, ok=asset.ok, error=asset.error)
             for asset in run.assets

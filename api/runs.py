@@ -14,15 +14,17 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import pipeline
 from api.config_view import apply_overrides
-from models import Item, save_items
+from models import Script, save_script
 from utils.openai_support import TaskResult
-from utils.paths import list_items_path, slugify
+from utils.paths import script_path, slugify
 
 STATUS_PENDING = "pending"
+STATUS_GENERATING_SCRIPT = "generating_script"
+STATUS_GENERATING_PROMPTS = "generating_prompts"
 STATUS_AWAITING_REVIEW = "awaiting_review"
 
 TERMINAL_STATUSES = frozenset({"completed", "failed", "cancelled"})
@@ -64,13 +66,13 @@ class Run:
 
     id: str
     topic: str
-    num_items: int
-    review_items: bool
+    target_seconds: int
+    review_script: bool
     overrides: dict[str, Any]
     status: str = STATUS_PENDING
     created_at: str = field(default_factory=_now)
     finished_at: str | None = None
-    items: list[Item] = field(default_factory=list)
+    script: Script = field(default_factory=lambda: Script(topic="", title=""))
     assets: list[AssetStatus] = field(default_factory=list)
     asset_total: int = 0
     logs: list[str] = field(default_factory=list)
@@ -124,9 +126,9 @@ class RunStore:
     def start(
         self,
         topic: str,
-        num_items: int,
+        target_seconds: int,
         *,
-        review_items: bool,
+        review_script: bool,
         overrides: dict[str, Any],
     ) -> Run:
         """Register a run and execute it on a daemon thread."""
@@ -140,8 +142,8 @@ class RunStore:
             run = Run(
                 id=uuid.uuid4().hex[:12],
                 topic=topic,
-                num_items=num_items,
-                review_items=review_items,
+                target_seconds=target_seconds,
+                review_script=review_script,
                 overrides=dict(overrides),
             )
             self._runs[run.id] = run
@@ -156,19 +158,19 @@ class RunStore:
         thread.start()
         return run
 
-    def approve_items(self, run_id: str, items: Sequence[Item]) -> Run:
-        """Replace the run's items with the edited ones and let it continue."""
+    def approve_script(self, run_id: str, script: Script) -> Run:
+        """Replace the run's script with the edited one and let it continue."""
         with self._lock:
             run = self.get(run_id)
             if run.status != STATUS_AWAITING_REVIEW:
                 raise RunConflictError(
                     f"run {run_id} is {run.status}, not {STATUS_AWAITING_REVIEW}"
                 )
-            run.items = list(items)
+            run.script = script
             gate = self._gates[run_id]
 
-        # Overwrite the saved list so the archive reflects the edits.
-        save_items(run.items, list_items_path())
+        # Overwrite the saved script so the archive reflects the edits.
+        save_script(run.script, script_path())
         gate.review.set()
         return run
 
@@ -258,37 +260,43 @@ class RunStore:
         try:
             with apply_overrides(run.overrides):
                 self._check_cancelled(gate)
-                self._set_status(run, "generating_list")
-                items = pipeline.generate_items_stage(
-                    run.topic, run.num_items, client=self._client, log=log
+                self._set_status(run, STATUS_GENERATING_SCRIPT)
+                script = pipeline.generate_script_stage(
+                    run.topic, run.target_seconds, client=self._client, log=log
+                )
+
+                self._check_cancelled(gate)
+                self._set_status(run, STATUS_GENERATING_PROMPTS)
+                script = pipeline.generate_prompts_stage(
+                    script, client=self._client, log=log
                 )
                 with self._lock:
-                    run.items = list(items)
+                    run.script = script
 
-                if run.review_items:
+                if run.review_script:
                     self._set_status(run, STATUS_AWAITING_REVIEW)
-                    log("Waiting for you to review the items...")
+                    log("Waiting for you to review the script...")
                     gate.review.wait()
                     self._check_cancelled(gate)
                     with self._lock:
-                        items = list(run.items)
-                    log(f"Continuing with {len(items)} approved item(s).")
+                        script = run.script
+                    log(f"Continuing with {len(script.sections)} approved section(s).")
 
                 self._check_cancelled(gate)
                 self._set_status(run, "generating_media")
-                self._begin_asset_stage(run, pipeline.media_job_total(items))
+                self._begin_asset_stage(run, pipeline.media_job_total(script))
                 pipeline.generate_media_stage(
-                    items,
+                    script,
                     client=self._client,
                     log=log,
                     on_asset=lambda result: self._record_asset(run, result),
                 )
 
                 self._check_cancelled(gate)
-                self._set_status(run, "rendering_titles")
-                self._begin_asset_stage(run, pipeline.titled_job_total(items))
-                pipeline.render_titled_images_stage(
-                    items,
+                self._set_status(run, "composing_frames")
+                self._begin_asset_stage(run, pipeline.compose_job_total(script))
+                pipeline.compose_stage(
+                    script,
                     log=log,
                     on_asset=lambda result: self._record_asset(run, result),
                 )
@@ -296,13 +304,13 @@ class RunStore:
                 self._check_cancelled(gate)
                 self._set_status(run, "rendering_video")
                 self._begin_asset_stage(run, 0)
-                video = pipeline.render_video_stage(items, log=log)
+                video, durations = pipeline.render_video_stage(script, log=log)
                 with self._lock:
                     run.video_path = video
 
                 self._check_cancelled(gate)
                 self._set_status(run, "archiving")
-                pipeline.archive_stage(run.topic, items, log=log)
+                pipeline.archive_stage(script, durations, log=log)
                 with self._lock:
                     run.archive_slug = slugify(run.topic)
 

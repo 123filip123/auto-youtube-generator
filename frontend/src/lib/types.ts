@@ -2,10 +2,11 @@
 
 export type RunStatus =
   | "pending"
-  | "generating_list"
+  | "generating_script"
+  | "generating_prompts"
   | "awaiting_review"
   | "generating_media"
-  | "rendering_titles"
+  | "composing_frames"
   | "rendering_video"
   | "archiving"
   | "completed"
@@ -21,26 +22,29 @@ export const TERMINAL_STATUSES: ReadonlySet<RunStatus> = new Set<RunStatus>([
 
 /** The stages shown in the progress indicator, in order. */
 export const STAGE_SEQUENCE: readonly { status: RunStatus; label: string }[] = [
-  { status: "generating_list", label: "Generate list" },
-  { status: "awaiting_review", label: "Review items" },
+  { status: "generating_script", label: "Write script" },
+  { status: "generating_prompts", label: "Design drawings" },
+  { status: "awaiting_review", label: "Review script" },
   { status: "generating_media", label: "Images & audio" },
-  { status: "rendering_titles", label: "Titled images" },
+  { status: "composing_frames", label: "Compose frames" },
   { status: "rendering_video", label: "Render video" },
   { status: "archiving", label: "Archive" },
 ];
 
-export interface Beat {
+export interface Section {
+  label: string;
   narration: string;
-  prompt: string;
+  prompts: string[];
+  /** Server-derived timings; sent back but ignored on write. */
+  start: number;
+  end: number;
 }
 
-export interface ItemPayload {
+export interface ScriptPayload {
+  topic: string;
   title: string;
-  /** Server-derived from the beat narrations; sent back but ignored on write. */
-  description: string;
   style: string;
-  beats: Beat[];
-  image_prompts: string[];
+  sections: Section[];
 }
 
 export interface AssetStatus {
@@ -52,16 +56,16 @@ export interface AssetStatus {
 export interface RunSummary {
   id: string;
   topic: string;
-  num_items: number;
+  target_seconds: number;
   status: RunStatus;
   created_at: string;
   finished_at: string | null;
 }
 
 export interface RunDetail extends RunSummary {
-  review_items: boolean;
+  review_script: boolean;
   overrides: Record<string, string | number>;
-  items: ItemPayload[];
+  script: ScriptPayload;
   assets: AssetStatus[];
   asset_total: number;
   logs: string[];
@@ -72,8 +76,8 @@ export interface RunDetail extends RunSummary {
 
 export interface CreateRunRequest {
   topic: string;
-  num_items: number;
-  review_items: boolean;
+  target_seconds: number;
+  review_script: boolean;
   overrides: Record<string, string | number>;
 }
 
@@ -91,26 +95,27 @@ export interface ConfigPayload {
 
 export interface ArchiveSummary {
   slug: string;
-  item_count: number;
+  section_count: number;
   image_count: number;
   audio_count: number;
   has_video: boolean;
   modified_at: string;
 }
 
-export interface ArchiveItem {
-  title: string;
-  description: string;
-  style: string;
-  beats: Beat[];
-  image_prompts: string[];
+export interface ArchiveSection {
+  label: string;
+  narration: string;
+  prompts: string[];
   image_urls: string[];
-  titled_image_urls: string[];
+  composed_image_urls: string[];
   audio_url: string | null;
 }
 
 export interface ArchiveDetail {
   slug: string;
+  topic: string;
+  title: string;
+  style: string;
   video_url: string | null;
-  items: ArchiveItem[];
+  sections: ArchiveSection[];
 }

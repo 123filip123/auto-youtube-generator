@@ -1,8 +1,8 @@
 """Read `generated_data/` into payloads the archive browser can render.
 
-Filenames are the join key: `images/item_04_prompt_02.png` belongs to item 4.
-Older archives were written before titled images and the video were copied in,
-so every subdirectory is treated as optional.
+Filenames are the join key: `images/section_02_shot_01.png` belongs to
+section 2. Every subdirectory is treated as optional, since an archive can be
+missing composed frames or a video (or, mid-run, everything but the script).
 """
 
 import re
@@ -10,8 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from models import InvalidItemsError, load_items
-from utils.paths import ARCHIVED_LIST_FILENAME, GENERATED_DATA_ROOT, VIDEO_FILENAME
+from models import InvalidScriptError, load_script
+from utils.paths import ARCHIVED_SCRIPT_FILENAME, GENERATED_DATA_ROOT, VIDEO_FILENAME
 
 MEDIA_PREFIX = "/media/generated_data"
 
@@ -39,10 +39,9 @@ def _count_files(directory: Path, suffix: str) -> int:
     return sum(1 for entry in directory.iterdir() if entry.suffix == suffix)
 
 
-def _names_for_item(directory: Path, item_number: int, suffix: str) -> list[str]:
+def _names_with_prefix(directory: Path, prefix: str, suffix: str) -> list[str]:
     if not directory.is_dir():
         return []
-    prefix = f"item_{item_number:02d}_"
     return sorted(
         entry.name
         for entry in directory.iterdir()
@@ -68,15 +67,17 @@ def list_archives() -> list[dict[str, Any]]:
     for folder in GENERATED_DATA_ROOT.iterdir():
         if not folder.is_dir() or not _VALID_SLUG.match(folder.name):
             continue
-        listing = folder / ARCHIVED_LIST_FILENAME
-        try:
-            items = load_items(listing) if listing.is_file() else []
-        except (InvalidItemsError, OSError):
-            items = []
+        listing = folder / ARCHIVED_SCRIPT_FILENAME
+        section_count = 0
+        if listing.is_file():
+            try:
+                section_count = len(load_script(listing).sections)
+            except (InvalidScriptError, OSError):
+                section_count = 0
         summaries.append(
             {
                 "slug": folder.name,
-                "item_count": len(items),
+                "section_count": section_count,
                 "image_count": _count_files(folder / "images", ".png"),
                 "audio_count": _count_files(folder / "audio", ".mp3"),
                 "has_video": (folder / VIDEO_FILENAME).is_file(),
@@ -89,39 +90,38 @@ def list_archives() -> list[dict[str, Any]]:
 
 
 def archive_detail(slug: str) -> dict[str, Any]:
-    """One archive's items with a media URL for every file that exists."""
+    """One archive's sections with a media URL for every file that exists."""
     folder = _archive_dir(slug)
 
-    listing = folder / ARCHIVED_LIST_FILENAME
+    listing = folder / ARCHIVED_SCRIPT_FILENAME
     if not listing.is_file():
         raise ArchiveNotFoundError(slug)
     try:
-        items = load_items(listing)
-    except (InvalidItemsError, OSError) as exc:
+        script = load_script(listing)
+    except (InvalidScriptError, OSError) as exc:
         raise ArchiveNotFoundError(slug) from exc
 
-    payload_items: list[dict[str, Any]] = []
-    for item_number, item in enumerate(items, start=1):
-        audio_name = f"item_{item_number:02d}.mp3"
+    payload_sections: list[dict[str, Any]] = []
+    for section_number, section in enumerate(script.sections, start=1):
+        audio_name = f"section_{section_number:02d}.mp3"
         has_audio = (folder / "audio" / audio_name).is_file()
-        payload_items.append(
+        payload_sections.append(
             {
-                "title": item.title,
-                "description": item.description,
-                "style": item.style,
-                "beats": [
-                    {"narration": beat.narration, "prompt": beat.prompt}
-                    for beat in item.beats
-                ],
-                "image_prompts": list(item.image_prompts),
+                "label": section.label,
+                "narration": section.narration,
+                "prompts": list(section.prompts),
                 "image_urls": [
                     _url(slug, "images", name)
-                    for name in _names_for_item(folder / "images", item_number, ".png")
+                    for name in _names_with_prefix(
+                        folder / "images", f"section_{section_number:02d}_", ".png"
+                    )
                 ],
-                "titled_image_urls": [
-                    _url(slug, "titled_images", name)
-                    for name in _names_for_item(
-                        folder / "titled_images", item_number, ".png"
+                "composed_image_urls": [
+                    _url(slug, "composed_images", name)
+                    for name in _names_with_prefix(
+                        folder / "composed_images",
+                        f"composed_section_{section_number:02d}_",
+                        ".png",
                     )
                 ],
                 "audio_url": _url(slug, "audio", audio_name) if has_audio else None,
@@ -131,6 +131,9 @@ def archive_detail(slug: str) -> dict[str, Any]:
     video = folder / VIDEO_FILENAME
     return {
         "slug": slug,
+        "topic": script.topic,
+        "title": script.title,
+        "style": script.style,
         "video_url": _url(slug, VIDEO_FILENAME) if video.is_file() else None,
-        "items": payload_items,
+        "sections": payload_sections,
     }

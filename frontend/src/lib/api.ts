@@ -3,9 +3,9 @@ import type {
   ArchiveSummary,
   ConfigPayload,
   CreateRunRequest,
-  ItemPayload,
   RunDetail,
   RunSummary,
+  ScriptPayload,
 } from "./types";
 
 /** An error the server reported, carrying its status so callers can branch. */
@@ -50,10 +50,10 @@ export const createRun = (payload: CreateRunRequest) =>
 
 export const getRun = (runId: string) => request<RunDetail>(`/runs/${runId}`);
 
-export const approveItems = (runId: string, items: ItemPayload[]) =>
-  request<RunDetail>(`/runs/${runId}/items`, {
+export const approveScript = (runId: string, script: ScriptPayload) =>
+  request<RunDetail>(`/runs/${runId}/script`, {
     method: "POST",
-    body: JSON.stringify({ items }),
+    body: JSON.stringify({ script }),
   });
 
 export const cancelRun = (runId: string) =>

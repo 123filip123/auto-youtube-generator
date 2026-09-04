@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from api import archives, schemas
 from api.config_view import ConfigOverrideError, validate_overrides
 from api.runs import RunConflictError, RunNotFoundError, RunStore
-from models import InvalidItemsError, parse_items
+from models import InvalidScriptError, parse_script
 
 router = APIRouter()
 
@@ -45,8 +45,8 @@ def create_run(payload: schemas.CreateRunRequest, store: RunStore = Depends(get_
     try:
         run = store.start(
             payload.topic,
-            payload.num_items,
-            review_items=payload.review_items,
+            payload.target_seconds,
+            review_script=payload.review_script,
             overrides=overrides,
         )
     except RunConflictError as exc:
@@ -63,24 +63,23 @@ def read_run(run_id: str, store: RunStore = Depends(get_store)):
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"no run {run_id}") from exc
 
 
-@router.post("/runs/{run_id}/items", response_model=schemas.RunDetailPayload)
-def approve_items(
+@router.post("/runs/{run_id}/script", response_model=schemas.RunDetailPayload)
+def approve_script(
     run_id: str,
-    payload: schemas.ApproveItemsRequest,
+    payload: schemas.ApproveScriptRequest,
     store: RunStore = Depends(get_store),
 ):
-    # Reuse the pipeline's own validation so the UI cannot submit an item the
-    # renderer would choke on. The prompt count is free-form here: the user may
-    # legitimately add or remove prompts while reviewing.
+    # Reuse the pipeline's own validation so the UI cannot submit a script the
+    # renderer would choke on. Prompt counts are free-form here: the reviewer
+    # may legitimately add or remove drawings, and assembly divides measured
+    # audio by whatever count each section ends up with.
     try:
-        items = parse_items(
-            [item.model_dump() for item in payload.items], expected_prompts=None
-        )
-    except InvalidItemsError as exc:
+        script = parse_script(payload.script.model_dump())
+    except InvalidScriptError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
 
     try:
-        return schemas.run_detail(store.approve_items(run_id, items))
+        return schemas.run_detail(store.approve_script(run_id, script))
     except RunNotFoundError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"no run {run_id}") from exc
     except RunConflictError as exc:
