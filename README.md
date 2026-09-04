@@ -20,9 +20,8 @@ This project automatically generates YouTube Shorts-style videos based on a topi
    continuation of that opening frame so the figure stays recognisable.
 3. Verify every expected asset exists before continuing.
 4. Compose each image onto a blurred 1080x1920 backdrop with its title.
-5. Assemble the titled images and narration into a vertical video with a slow
-   zoom on each image, holding each frame for as long as the narration it
-   illustrates.
+5. Assemble the titled images and narration into a vertical video, holding
+   each frame still for as long as the narration it illustrates.
 6. Archive the run — list, audio, images, titled images and the finished video
    — into `generated_data/<topic-slug>/`.
 

@@ -17,7 +17,7 @@ def generate_video_short(items: Sequence[Item]) -> Path:
     """Render a 1080x1920 video from the titled images and narration on disk.
 
     Each item shows its images in sequence over its narration, with a short
-    silence before and after, and a slow zoom on every image.
+    silence before and after. Every image is held still.
     """
     VIDEO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     output_path = video_output_path()

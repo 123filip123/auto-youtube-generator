@@ -9,24 +9,13 @@ from moviepy.editor import (
     ColorClip,
     CompositeAudioClip,
     CompositeVideoClip,
-    VideoClip,
+    ImageClip,
 )
 from PIL import Image
 
 import config
 from models import Item
 from utils.paths import audio_path, titled_image_path
-
-
-def zoom_scale(t: float, segment_duration: float, end_scale: float) -> float:
-    """Linear zoom from 1.0 to `end_scale`, clamped at both ends.
-
-    Clamping matters: moviepy sometimes samples marginally outside [0, duration].
-    """
-    if segment_duration <= 0:
-        return 1.0
-    progress = min(max(t / segment_duration, 0.0), 1.0)
-    return 1.0 + (end_scale - 1.0) * progress
 
 
 def beat_weights(item: Item) -> list[float]:
@@ -77,24 +66,15 @@ def build_background_clip(duration: float) -> ColorClip:
 
 
 def build_image_clip(image_path: Path, segment_duration: float, start_time: float):
-    """A still image that slowly zooms in over `segment_duration`.
+    """A still image held for `segment_duration`.
 
-    The source is decoded once and captured in the closure, so each frame costs
-    exactly one BILINEAR resize instead of a decode plus a LANCZOS resize.
+    Decoded once here rather than once per frame, and handed over as an array
+    so the clip is RGB whatever the file on disk happens to be.
     """
     with Image.open(image_path) as opened:
-        source = opened.convert("RGB")
-    base_width, base_height = source.size
+        frame = np.asarray(opened.convert("RGB"))
 
-    def make_frame(t):
-        scale = zoom_scale(t, segment_duration, config.ZOOM_END_SCALE)
-        resized = source.resize(
-            (round(base_width * scale), round(base_height * scale)),
-            Image.Resampling.BILINEAR,
-        )
-        return np.asarray(resized)
-
-    clip = VideoClip(make_frame, duration=segment_duration)
+    clip = ImageClip(frame, duration=segment_duration)
     return clip.set_position("center").set_start(start_time)
 
 

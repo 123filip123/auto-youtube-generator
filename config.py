@@ -96,7 +96,6 @@ VIDEO_AUDIO_CODEC = "aac"
 VIDEO_PRESET = _env_str("VIDEO_PRESET", "medium")
 INTRO_SILENCE_SECONDS = 0.2
 OUTRO_SILENCE_SECONDS = 0.5
-ZOOM_END_SCALE = 1.2
 
 # --- Titled image rendering ---------------------------------------------
 TITLE_FONT_SIZE = 120

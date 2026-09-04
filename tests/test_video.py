@@ -5,36 +5,7 @@ from PIL import Image
 
 import config
 from models import Beat, Item
-from scripts.non_ai.generate_video_short.utils import (
-    beat_weights,
-    segment_bounds,
-    zoom_scale,
-)
-
-
-def test_zoom_starts_at_one():
-    assert zoom_scale(0.0, 3.0, 1.2) == pytest.approx(1.0)
-
-
-def test_zoom_reaches_the_end_scale():
-    assert zoom_scale(3.0, 3.0, 1.2) == pytest.approx(1.2)
-
-
-def test_zoom_is_linear_at_the_midpoint():
-    assert zoom_scale(1.5, 3.0, 1.2) == pytest.approx(1.1)
-
-
-def test_zoom_clamps_past_the_end():
-    # moviepy can request t marginally beyond the clip duration.
-    assert zoom_scale(3.5, 3.0, 1.2) == pytest.approx(1.2)
-
-
-def test_zoom_clamps_before_the_start():
-    assert zoom_scale(-1.0, 3.0, 1.2) == pytest.approx(1.0)
-
-
-def test_zoom_handles_zero_duration():
-    assert zoom_scale(0.0, 0.0, 1.2) == pytest.approx(1.0)
+from scripts.non_ai.generate_video_short.utils import beat_weights, segment_bounds
 
 
 def test_segment_bounds_splits_evenly():

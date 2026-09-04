@@ -21,7 +21,6 @@ def test_defaults_are_sane():
     assert module.VIDEO_WIDTH == 1080
     assert module.VIDEO_HEIGHT == 1920
     assert module.VIDEO_FPS == 24
-    assert module.ZOOM_END_SCALE == pytest.approx(1.2)
 
 
 def test_int_env_override(monkeypatch):
