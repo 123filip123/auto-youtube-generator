@@ -125,6 +125,13 @@ def _asset_reporter(on_asset: AssetCallback | None) -> AssetCallback | None:
         return None
 
     def report(result: TaskResult) -> None:
+        # NOTE: The isinstance(..., list) test discriminates section-chain jobs
+        # from other jobs in the shared pool (e.g. audio jobs) by checking
+        # whether their success value is a list. This discriminator is correct
+        # today because section-chain jobs are the only jobs returning a list.
+        # If a new job type that returns a list-shaped success value is added
+        # to the shared pool, this check will silently drop its results from
+        # the progress callback.
         if result.ok and isinstance(result.value, list):
             return
         on_asset(result)

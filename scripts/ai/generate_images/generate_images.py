@@ -95,6 +95,13 @@ def flatten_chain_results(results: Sequence[TaskResult]) -> list[TaskResult]:
 
     A chain job that failed outright — rather than returning per-shot results —
     is kept as-is so the failure is still reported.
+
+    NOTE: The isinstance(..., list) test discriminates section-chain jobs from
+    other jobs in the shared pool (e.g. audio jobs) by checking whether their
+    success value is a list. This discriminator is correct today because
+    section-chain jobs are the only jobs returning a list. If a new job type
+    that returns a list-shaped success value is added to the shared pool, this
+    check will silently mistake it for a chain result, breaking the flattening.
     """
     flat: list[TaskResult] = []
     for result in results:

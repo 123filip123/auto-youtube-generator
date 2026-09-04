@@ -56,7 +56,7 @@ IMAGE_SIZE = _env_str("IMAGE_SIZE", "1024x1024")
 IMAGE_QUALITY = _env_str("IMAGE_QUALITY", "medium")
 
 # The fixed look every generated frame shares. Prepended to every image
-# prompt, in front of the item's own style sheet.
+# prompt, in front of the script's style sheet.
 STORYBOARD_STYLE = _env_str(
     "STORYBOARD_STYLE",
     "Black ink outline drawing filled with flat, bright colour on a plain "
@@ -71,15 +71,17 @@ STORYBOARD_STYLE = _env_str(
 TARGET_VIDEO_SECONDS = _env_int("TARGET_VIDEO_SECONDS", 85)
 SECONDS_PER_IMAGE = 2.5
 
-# The model used to turn narration length into a per-shot word budget. Both
-# constants were solved from real TTS renders.
+# Constants for estimating section narration duration and the script's word
+# budget. Both were solved from real TTS renders, and must be re-solved if you
+# change TTS_VOICE or TTS_INSTRUCTIONS.
 #
-# The pause matters more than it looks: the voice leaves ~1.6s of silence
-# after every sentence, and one shot is one sentence, so that pause is a
-# floor under the frame duration no matter how few words a shot has. Frames
-# much shorter than ~3s are not reachable this way — shortening the sentence
-# only buys back speaking time, never the gap. Re-solve both if you change
-# TTS_VOICE or TTS_INSTRUCTIONS.
+# Sections are spoken as continuous paragraphs. Shots within a section run at
+# roughly SECONDS_PER_IMAGE each, so shot duration is not constrained by the
+# pause term. Instead, the pause term is load-bearing for two reasons:
+# (1) speaking_seconds() uses both to estimate how long a section takes to
+#     narrate, and (2) the word budget calculation uses the pause to trim the
+#     budget downward by roughly 40%, so the generated script does not
+#     overwhelm the available time.
 NARRATION_WORDS_PER_SECOND = 3.15
 NARRATION_SENTENCE_PAUSE_SECONDS = 1.6
 MAX_CONCURRENT_REQUESTS = _env_int("MAX_CONCURRENT_REQUESTS", 4)

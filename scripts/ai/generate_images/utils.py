@@ -10,7 +10,7 @@ from utils.openai_support import with_retry
 
 
 def styled_prompt(item_style: str, prompt: str) -> str:
-    """The global look, then the item's style sheet, then the beat itself."""
+    """The global look, then the script's style sheet, then the beat itself."""
     parts = [config.STORYBOARD_STYLE, item_style.strip(), prompt.strip()]
     return " ".join(part for part in parts if part)
 
@@ -55,7 +55,7 @@ def generate_image_from_reference(
 ) -> Path:
     """Draw `prompt` as a continuation of the already-generated `reference`.
 
-    The reference is what keeps a character recognisable across an item's
+    The reference is what keeps a character recognisable across a section's
     frames; a text style sheet alone lets the figure drift.
     """
     client = client or get_open_ai_client()
