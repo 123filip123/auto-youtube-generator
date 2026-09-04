@@ -5,10 +5,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Sequence
 
-from models import Item, save_items
+from models import Item, Script, save_items, save_script, with_durations
 from utils.paths import (
     ARCHIVED_LIST_FILENAME,
+    ARCHIVED_SCRIPT_FILENAME,
     AUDIO_OUTPUT_DIR,
+    COMPOSED_IMAGE_OUTPUT_DIR,
     GENERATED_DATA_ROOT,
     IMAGE_OUTPUT_DIR,
     TITLED_IMAGE_OUTPUT_DIR,
@@ -58,6 +60,46 @@ def save_to_generated_data(topic: str, items: Sequence[Item]) -> Path:
     print(
         f"\nArchived to {folder}: {audio_count} audio, {image_count} images, "
         f"{titled_count} titled images"
+        + (", 1 video" if video.exists() else ", no video")
+    )
+    return folder
+
+
+def save_script_to_generated_data(
+    script: Script, durations: Sequence[float]
+) -> Path:
+    """Copy this run's script, audio, images, frames and video into an archive.
+
+    `durations` are the measured section lengths returned by assembly; they
+    replace the estimates in the saved `script.json`, which is the first point
+    at which every section's real runtime is known.
+
+    Must run *after* the video is rendered, or the archive has no video in it.
+    """
+    slug = slugify(script.topic)
+    if slug == "untitled":
+        slug = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    folder = GENERATED_DATA_ROOT / slug
+    folder.mkdir(parents=True, exist_ok=True)
+
+    save_script(
+        with_durations(script, durations), folder / ARCHIVED_SCRIPT_FILENAME
+    )
+
+    audio_count = _copy_tree(AUDIO_OUTPUT_DIR, folder / "audio", ".mp3")
+    image_count = _copy_tree(IMAGE_OUTPUT_DIR, folder / "images", ".png")
+    composed_count = _copy_tree(
+        COMPOSED_IMAGE_OUTPUT_DIR, folder / "composed_images", ".png"
+    )
+
+    video = video_output_path()
+    if video.exists():
+        shutil.copy2(video, folder / VIDEO_FILENAME)
+
+    print(
+        f"\nArchived to {folder}: {audio_count} audio, {image_count} images, "
+        f"{composed_count} composed frames"
         + (", 1 video" if video.exists() else ", no video")
     )
     return folder

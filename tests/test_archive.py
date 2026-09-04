@@ -1,12 +1,19 @@
+import json
 from pathlib import Path
 
 import pytest
 
-from models import Item, load_items
+from models import Item, Script, Section, load_items, load_script
 from scripts.non_ai.save_to_generated_data.save_to_generated_data import (
     save_to_generated_data,
+    save_script_to_generated_data,
 )
-from utils.paths import ensure_output_dirs
+from utils.paths import (
+    ARCHIVED_SCRIPT_FILENAME,
+    COMPOSED_IMAGE_OUTPUT_DIR,
+    GENERATED_DATA_ROOT,
+    ensure_output_dirs,
+)
 
 
 @pytest.fixture
@@ -73,3 +80,45 @@ def test_falls_back_to_a_timestamp_for_an_unusable_topic(populated_outputs):
     folder = save_to_generated_data("!!!", one_item())
     assert folder.parent == Path("generated_data")
     assert folder.is_dir()
+
+
+def build_script(topic="how dogs evolved"):
+    return Script(
+        topic=topic,
+        title="Wolves Domesticated Themselves",
+        style="A grey-blue wolf.",
+        sections=(
+            Section("HOOK", "One line.", ("p1", "p2")),
+            Section("SETUP", "Another line.", ("p1",)),
+        ),
+    )
+
+
+def test_archives_under_the_topic_slug(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    folder = save_script_to_generated_data(build_script(), [4.0, 6.0])
+    assert folder == GENERATED_DATA_ROOT / "how_dogs_evolved"
+    assert (folder / ARCHIVED_SCRIPT_FILENAME).is_file()
+
+
+def test_writes_measured_timings_over_the_estimates(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    folder = save_script_to_generated_data(build_script(), [4.0, 6.0])
+    archived = load_script(folder / ARCHIVED_SCRIPT_FILENAME)
+    assert (archived.sections[0].start, archived.sections[0].end) == (0.0, 4.0)
+    assert (archived.sections[1].start, archived.sections[1].end) == (4.0, 10.0)
+
+
+def test_copies_composed_frames_not_titled_ones(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    COMPOSED_IMAGE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    (COMPOSED_IMAGE_OUTPUT_DIR / "composed_section_01_shot_01.png").write_bytes(b"png")
+    folder = save_script_to_generated_data(build_script(), [4.0, 6.0])
+    assert (folder / "composed_images" / "composed_section_01_shot_01.png").is_file()
+
+
+def test_falls_back_to_a_timestamp_slug(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    folder = save_script_to_generated_data(build_script(topic="!!!"), [4.0, 6.0])
+    assert folder.name != "untitled"
+    assert folder.name.isdigit() or "_" in folder.name

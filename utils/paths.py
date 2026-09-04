@@ -28,6 +28,7 @@ ALL_OUTPUT_DIRS = (
 
 LIST_ITEMS_FILENAME = "list_items_with_prompts.json"
 ARCHIVED_LIST_FILENAME = "list_items.json"
+ARCHIVED_SCRIPT_FILENAME = "script.json"
 VIDEO_FILENAME = "final_video_short.mp4"
 SCRIPT_FILENAME = "script.json"
 
