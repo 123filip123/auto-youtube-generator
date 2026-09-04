@@ -12,6 +12,7 @@ AUDIO_OUTPUT_DIR = OUTPUTS_ROOT / "audio_output"
 IMAGE_OUTPUT_DIR = OUTPUTS_ROOT / "image_output"
 JSON_OUTPUT_DIR = OUTPUTS_ROOT / "json_output"
 TITLED_IMAGE_OUTPUT_DIR = OUTPUTS_ROOT / "titled_image_output"
+COMPOSED_IMAGE_OUTPUT_DIR = OUTPUTS_ROOT / "composed_image_output"
 VIDEO_OUTPUT_DIR = OUTPUTS_ROOT / "video_output"
 
 GENERATED_DATA_ROOT = Path("generated_data")
@@ -21,12 +22,14 @@ ALL_OUTPUT_DIRS = (
     IMAGE_OUTPUT_DIR,
     JSON_OUTPUT_DIR,
     TITLED_IMAGE_OUTPUT_DIR,
+    COMPOSED_IMAGE_OUTPUT_DIR,
     VIDEO_OUTPUT_DIR,
 )
 
 LIST_ITEMS_FILENAME = "list_items_with_prompts.json"
 ARCHIVED_LIST_FILENAME = "list_items.json"
 VIDEO_FILENAME = "final_video_short.mp4"
+SCRIPT_FILENAME = "script.json"
 
 _SLUG_SEPARATORS = re.compile(r"[^a-z0-9]+")
 
@@ -73,3 +76,25 @@ def slugify(text: str) -> str:
 
 def generated_data_dir(topic: str) -> Path:
     return GENERATED_DATA_ROOT / slugify(topic)
+
+
+def section_image_path(section_number: int, shot_number: int) -> Path:
+    return (
+        IMAGE_OUTPUT_DIR
+        / f"section_{section_number:02d}_shot_{shot_number:02d}.png"
+    )
+
+
+def section_audio_path(section_number: int) -> Path:
+    return AUDIO_OUTPUT_DIR / f"section_{section_number:02d}.mp3"
+
+
+def composed_image_path(section_number: int, shot_number: int) -> Path:
+    return (
+        COMPOSED_IMAGE_OUTPUT_DIR
+        / f"composed_section_{section_number:02d}_shot_{shot_number:02d}.png"
+    )
+
+
+def script_path() -> Path:
+    return JSON_OUTPUT_DIR / SCRIPT_FILENAME
