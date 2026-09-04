@@ -14,8 +14,13 @@ from moviepy.editor import (
 from PIL import Image
 
 import config
-from models import Item
-from utils.paths import audio_path, titled_image_path
+from models import Item, Section
+from utils.paths import (
+    audio_path,
+    composed_image_path,
+    section_audio_path,
+    titled_image_path,
+)
 
 
 def beat_weights(item: Item) -> list[float]:
@@ -43,7 +48,7 @@ def segment_bounds(
 
     weights = list(weights)
     if not weights:
-        raise ValueError("Need at least one image per item, got 0")
+        raise ValueError("Need at least one image per section, got 0")
 
     total_weight = sum(weights)
     if total_weight <= 0:
@@ -106,6 +111,44 @@ def build_item_clip(item_number: int, item: Item):
         layers.append(
             build_image_clip(
                 titled_image_path(item_number, beat_number), duration, start
+            )
+        )
+
+    return CompositeVideoClip(layers).set_duration(total_duration).set_audio(audio)
+
+
+def build_section_audio(
+    section_number: int, *, is_first: bool, is_last: bool
+) -> tuple[CompositeAudioClip, float]:
+    """One section's narration, padded only where the video actually ends.
+
+    Padding every section — as the per-item version did — puts a silent gap at
+    every interior boundary, which is what makes a concatenation sound like
+    separate clips rather than one continuous video.
+    """
+    voice = AudioFileClip(str(section_audio_path(section_number)))
+    lead = config.INTRO_SILENCE_SECONDS if is_first else 0.0
+    tail = config.OUTRO_SILENCE_SECONDS if is_last else 0.0
+    total_duration = lead + voice.duration + tail
+    padded = CompositeAudioClip([voice.set_start(lead)]).set_duration(total_duration)
+    return padded, total_duration
+
+
+def build_section_clip(
+    section_number: int, section: Section, *, is_first: bool, is_last: bool
+):
+    """One section: its shots held in equal turns over its narration."""
+    audio, total_duration = build_section_audio(
+        section_number, is_first=is_first, is_last=is_last
+    )
+
+    layers = [build_background_clip(total_duration)]
+    for shot_number, (start, duration) in enumerate(
+        segment_bounds(total_duration, len(section.prompts)), start=1
+    ):
+        layers.append(
+            build_image_clip(
+                composed_image_path(section_number, shot_number), duration, start
             )
         )
 

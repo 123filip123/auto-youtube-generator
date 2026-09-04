@@ -1,4 +1,5 @@
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from PIL import Image
@@ -106,3 +107,61 @@ def test_beat_weights_counts_narration_words():
 
 def test_beat_weights_are_all_zero_for_legacy_items():
     assert beat_weights(Item.from_prompts("T", "d", ("a", "b"))) == [0.0, 0.0]
+
+
+from models import Script, Section
+from scripts.non_ai.generate_video_short import utils as video_utils
+from scripts.non_ai.generate_video_short.utils import segment_bounds
+
+
+def test_segment_bounds_splits_a_section_evenly():
+    bounds = segment_bounds(10.0, 4)
+    assert [round(duration, 6) for _, duration in bounds] == [2.5, 2.5, 2.5, 2.5]
+    assert bounds[0][0] == 0.0
+    assert round(bounds[-1][0], 6) == 7.5
+
+
+def test_segment_bounds_rejects_a_section_with_no_shots():
+    with pytest.raises(ValueError, match="at least one image"):
+        segment_bounds(10.0, 0)
+
+
+class FakeVoice:
+    """Stands in for an AudioFileClip with a known duration."""
+
+    def __init__(self, duration):
+        self.duration = duration
+
+    def set_start(self, start):
+        self.start = start
+        return self
+
+
+def test_only_the_first_section_gets_intro_silence(monkeypatch):
+    monkeypatch.setattr(video_utils, "AudioFileClip", lambda path: FakeVoice(10.0))
+    monkeypatch.setattr(
+        video_utils,
+        "CompositeAudioClip",
+        lambda clips: SimpleNamespace(set_duration=lambda d: SimpleNamespace(duration=d)),
+    )
+
+    _, first = video_utils.build_section_audio(1, is_first=True, is_last=False)
+    _, middle = video_utils.build_section_audio(2, is_first=False, is_last=False)
+    _, last = video_utils.build_section_audio(3, is_first=False, is_last=True)
+
+    assert first == 10.0 + config.INTRO_SILENCE_SECONDS
+    assert middle == 10.0
+    assert last == 10.0 + config.OUTRO_SILENCE_SECONDS
+
+
+def test_a_single_section_gets_both_silences(monkeypatch):
+    monkeypatch.setattr(video_utils, "AudioFileClip", lambda path: FakeVoice(10.0))
+    monkeypatch.setattr(
+        video_utils,
+        "CompositeAudioClip",
+        lambda clips: SimpleNamespace(set_duration=lambda d: SimpleNamespace(duration=d)),
+    )
+    _, total = video_utils.build_section_audio(1, is_first=True, is_last=True)
+    assert total == (
+        10.0 + config.INTRO_SILENCE_SECONDS + config.OUTRO_SILENCE_SECONDS
+    )
