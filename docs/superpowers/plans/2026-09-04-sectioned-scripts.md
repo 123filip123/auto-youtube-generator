@@ -2565,6 +2565,35 @@ def test_asset_reporter_is_none_when_no_callback_given():
     assert pipeline._asset_reporter(None) is None
 
 
+def test_sections_without_shots_names_the_offenders():
+    script = Script(
+        topic="t",
+        title="T",
+        sections=(
+            Section("HOOK", "Narration.", ("p1",)),
+            Section("SETUP", "Narration.", ()),
+            Section("PAYOFF", "Narration.", ()),
+        ),
+    )
+    assert pipeline.sections_without_shots(script) == ["2. SETUP", "3. PAYOFF"]
+
+
+def test_sections_without_shots_is_empty_when_every_section_has_one():
+    assert pipeline.sections_without_shots(build_script((1, 1))) == []
+
+
+def test_media_stage_refuses_a_section_with_no_drawings(tmp_path, monkeypatch):
+    """The review gate lets a human delete every drawing; fail before paying."""
+    monkeypatch.chdir(tmp_path)
+    script = Script(
+        topic="t",
+        title="T",
+        sections=(Section("HOOK", "Narration.", ()),),
+    )
+    with pytest.raises(pipeline.PipelineError, match="no drawings"):
+        pipeline.generate_media_stage(script, log=lambda _: None)
+
+
 def test_fail_names_every_missing_file():
     with pytest.raises(pipeline.PipelineError, match="2 required file"):
         pipeline._fail("Media generation", [Path("a.png"), Path("b.mp3")])
@@ -2677,6 +2706,24 @@ def compose_job_total(script: Script) -> int:
     return sum(len(section.prompts) for section in script.sections)
 
 
+def sections_without_shots(script: Script) -> list[str]:
+    """Labels of sections carrying narration but no drawings.
+
+    The AI never produces these — call 2 guarantees at least one prompt per
+    section — but the review gate lets a human delete every drawing from a
+    section, and nothing downstream notices: the chain jobs skip a promptless
+    section, `missing_media` iterates an empty range so it flags nothing, and
+    assembly then dies inside `segment_bounds` with a bare "Need at least one
+    image per section, got 0" that names neither the section nor the cause.
+    Catching it here fails before a cent is spent on narration.
+    """
+    return [
+        f"{position}. {section.label}"
+        for position, section in enumerate(script.sections, start=1)
+        if not section.prompts
+    ]
+
+
 def _asset_reporter(on_asset: AssetCallback | None) -> AssetCallback | None:
     """Wrap a progress callback so chain jobs are not double-counted.
 
@@ -2740,6 +2787,15 @@ def generate_media_stage(
     that job's problem rather than the scheduler's.
     """
     ensure_output_dirs()
+
+    empty = sections_without_shots(script)
+    if empty:
+        listing = "\n".join(f"  - {label}" for label in empty)
+        raise PipelineError(
+            f"{len(empty)} section(s) have narration but no drawings:\n{listing}\n"
+            f"Add at least one drawing to each, or remove the section."
+        )
+
     total = media_job_total(script)
     log(
         f"Generating {total} media assets "
