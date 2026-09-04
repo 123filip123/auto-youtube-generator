@@ -2906,6 +2906,34 @@ Remove, in this order:
 5. `scripts/ai/generate_audios/`: `generate_audio_for_item`, `audio_jobs`, `generate_audio_for_items`.
 6. `scripts/non_ai/generate_video_short/`: `beat_weights`, `build_item_audio`, `build_item_clip`, `generate_video_short`.
 7. `scripts/non_ai/save_to_generated_data/`: `save_to_generated_data`.
+8. The old-shape tests that exercise all of the above. Without this the suite
+   fails at collection, not on assertions. Per file:
+   - `tests/test_config.py`: replace the `IMAGE_PROMPTS_PER_ITEM` and
+     `SECONDS_PER_FRAME` assertions (lines 16-17) with
+     `assert module.TARGET_VIDEO_SECONDS == 85` and
+     `assert module.SECONDS_PER_IMAGE == pytest.approx(2.5)`.
+   - `tests/test_paths.py`: delete `test_image_path_is_zero_padded`,
+     `test_image_path_handles_double_digits`, `test_audio_path_is_zero_padded`,
+     `test_titled_image_path_has_short_suffix`, `test_list_items_path`.
+   - `tests/test_generate_images.py`: delete the `Beat, Item` import, the
+     `anchor_jobs`/`followup_jobs`/`generate_images` imports, the `two_items`
+     helper, and every test using them. Keep the Task 6 chain tests and any
+     `styled_prompt`/`generate_image` tests that do not mention `Item`.
+   - `tests/test_generate_audio.py`: delete the `Item` import, the
+     `audio_jobs`/`generate_audio_for_items`/`generate_audio_for_item` imports,
+     the `two_items` helper and every test using them. **Keep `MP3_BYTES`, the
+     `FakeSpeech` class and the `fake_client` helper** — the Task 7 tests are
+     written against them.
+   - `tests/test_video.py`: delete the `Beat, Item` import, the `beat_weights`
+     import and its two tests. **Rewrite** (do not delete) the
+     `@pytest.mark.slow` `test_renders_a_real_video` for the section shape: it
+     is the only real moviepy encode in the suite. It should build a `Script`
+     with one section, write tiny PNGs to `composed_image_path(1, n)` and an
+     mp3 to `section_audio_path(1)`, and call `generate_video_from_script`.
+   - `tests/test_archive.py`: delete the `Item, load_items` import, the
+     `save_to_generated_data` import, the `one_item` helper, the titled-image
+     lines in the `populated_outputs` fixture, and every old test. Keep the
+     Task 10 tests.
 
 Then fix every remaining import that referenced a deleted name.
 
@@ -2975,9 +3003,14 @@ def one_script():
     )
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def stub_stages(monkeypatch):
-    """Stub every stage so API tests never call OpenAI or render video."""
+    """Stub every stage so route/run tests never call OpenAI or render video.
+
+    Deliberately NOT autouse: `tests/api/test_end_to_end.py` drives the real
+    stages with only the OpenAI client faked, and is the suite's only
+    full-pipeline coverage. An autouse stub would turn it into a green no-op.
+    """
     monkeypatch.setattr(
         "api.runs.pipeline.generate_script_stage",
         lambda topic, target_seconds, client=None, log=print: one_script(),
@@ -3017,7 +3050,8 @@ def app(tmp_path, monkeypatch):
 
 
 @pytest.fixture
-def client(app):
+def client(app, stub_stages):
+    """A client whose stages are stubbed. End-to-end tests build their own."""
     with TestClient(app) as test_client:
         yield test_client
 
@@ -3123,6 +3157,51 @@ def test_config_no_longer_offers_image_prompts_per_item(client):
     assert "IMAGE_PROMPTS_PER_ITEM" not in names
     assert "TARGET_VIDEO_SECONDS" in names
 ```
+
+Then rewrite `tests/api/test_end_to_end.py` for the new shape. It builds its own
+`TestClient` and drives the real stages with only the OpenAI client faked, so it
+does not use the `client` fixture and must not be stubbed. Four changes:
+
+1. Its fake OpenAI client must now answer **two** chat completions in order —
+   the script (call 1), then the prompts (call 2). Replace the single
+   `ITEMS_JSON` constant with:
+
+```python
+SCRIPT_JSON = json.dumps(
+    {
+        "title": "Wolves Domesticated Themselves",
+        "sections": [
+            {"label": "HOOK", "narration": "Your dog's ancestor could have killed you."},
+            {"label": "PAYOFF", "narration": "Wolves chose us as much as we chose them."},
+        ],
+    }
+)
+
+PROMPTS_JSON = json.dumps(
+    {
+        "style": "A lean grey-blue wolf with amber eyes.",
+        "sections": [
+            {"label": "HOOK", "prompts": ["a snarling wolf", "a goofy dog"]},
+            {"label": "PAYOFF", "prompts": ["a wolf and a person side by side"]},
+        ],
+    }
+)
+```
+
+   The fake's `chat.completions.create` returns `SCRIPT_JSON` on its first call
+   and `PROMPTS_JSON` on every call after — a list popped per call, or a counter.
+
+2. Swap the path imports: `image_path` becomes `section_image_path`,
+   `titled_image_path` becomes `composed_image_path`, `audio_path` becomes
+   `section_audio_path`, and assertions move from `item_01_prompt_01` names to
+   `section_01_shot_01` names.
+
+3. The create-run call posts `target_seconds` (use `15`, the floor, to keep the
+   render tiny) instead of `num_items`, and `review_script` instead of
+   `review_items`.
+
+4. If it exercises the review gate, it posts to `/api/runs/{id}/script` with a
+   `{"script": {...}}` body instead of `/items`.
 
 - [ ] **Step 3: Run the tests to verify they fail**
 
