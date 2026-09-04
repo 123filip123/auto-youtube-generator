@@ -70,6 +70,11 @@ STORYBOARD_STYLE = _env_str(
 # item runs: six beats is roughly fifteen seconds.
 IMAGE_PROMPTS_PER_ITEM = _env_int("IMAGE_PROMPTS_PER_ITEM", 6)
 
+# How long a script should run, and how long one image holds. Image count is
+# a consequence of narration length, not a knob: see utils/timing.py.
+TARGET_VIDEO_SECONDS = _env_int("TARGET_VIDEO_SECONDS", 85)
+SECONDS_PER_IMAGE = 2.5
+
 # How long one frame should hold, and the model used to turn that into a
 # per-beat word budget. Both constants were solved from real TTS renders.
 #
