@@ -5,8 +5,23 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import ItemEditor from "./ItemEditor";
 
 const items = [
-  { title: "Dodo", description: "A bird.", image_prompts: ["a", "b"] },
-  { title: "Moa", description: "A taller bird.", image_prompts: ["c"] },
+  {
+    title: "Dodo",
+    description: "A bird. It could not fly.",
+    style: "A round flightless bird.",
+    beats: [
+      { narration: "A bird.", prompt: "a" },
+      { narration: "It could not fly.", prompt: "b" },
+    ],
+    image_prompts: ["a", "b"],
+  },
+  {
+    title: "Moa",
+    description: "A taller bird.",
+    style: "A very tall bird.",
+    beats: [{ narration: "A taller bird.", prompt: "c" }],
+    image_prompts: ["c"],
+  },
 ];
 
 function mockPost(status = 200, body: unknown = { id: "abc" }) {
@@ -41,21 +56,54 @@ describe("ItemEditor", () => {
     expect(body.items[1].title).toBe("Moa");
   });
 
-  it("adds and removes image prompts", async () => {
+  it("adds and removes beats", async () => {
     const fetchMock = mockPost();
     render(<ItemEditor runId="abc" items={items} onApproved={vi.fn()} />);
 
-    await userEvent.click(screen.getAllByRole("button", { name: /add prompt/i })[1]);
-    await userEvent.type(screen.getByLabelText("Item 2 prompt 2"), "new prompt");
+    await userEvent.click(screen.getAllByRole("button", { name: /add beat/i })[1]);
+    await userEvent.type(screen.getByLabelText("Item 2 beat 2 drawing"), "new prompt");
     await userEvent.click(
-      screen.getByRole("button", { name: "Remove item 1 prompt 2" }),
+      screen.getByRole("button", { name: "Remove item 1 beat 2" }),
     );
     await userEvent.click(screen.getByRole("button", { name: /approve/i }));
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const body = JSON.parse(fetchMock.mock.calls[0][1]!.body as string);
-    expect(body.items[0].image_prompts).toEqual(["a"]);
-    expect(body.items[1].image_prompts).toEqual(["c", "new prompt"]);
+    expect(body.items[0].beats).toHaveLength(1);
+    expect(body.items[0].beats[0].prompt).toBe("a");
+    expect(body.items[1].beats[1].prompt).toBe("new prompt");
+  });
+
+  it("edits a beat's narration and shows the derived description", async () => {
+    const fetchMock = mockPost();
+    render(<ItemEditor runId="abc" items={items} onApproved={vi.fn()} />);
+
+    const narration = screen.getByLabelText("Item 1 beat 1 narration");
+    await userEvent.clear(narration);
+    await userEvent.type(narration, "A very odd bird.");
+
+    expect(
+      screen.getByText("A very odd bird. It could not fly."),
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /approve/i }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const body = JSON.parse(fetchMock.mock.calls[0][1]!.body as string);
+    expect(body.items[0].beats[0].narration).toBe("A very odd bird.");
+  });
+
+  it("edits the style sheet", async () => {
+    const fetchMock = mockPost();
+    render(<ItemEditor runId="abc" items={items} onApproved={vi.fn()} />);
+
+    const style = screen.getByLabelText("Item 1 style");
+    await userEvent.clear(style);
+    await userEvent.type(style, "A spotted bird.");
+    await userEvent.click(screen.getByRole("button", { name: /approve/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const body = JSON.parse(fetchMock.mock.calls[0][1]!.body as string);
+    expect(body.items[0].style).toBe("A spotted bird.");
   });
 
   it("removes an item", async () => {

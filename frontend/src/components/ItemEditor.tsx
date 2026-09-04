@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { approveItems } from "@/lib/api";
-import type { ItemPayload } from "@/lib/types";
+import type { Beat, ItemPayload } from "@/lib/types";
 
 interface Props {
   runId: string;
@@ -22,15 +22,20 @@ interface Props {
 }
 
 /**
- * Edit the generated items before any media is paid for.
+ * Edit the generated storyboards before any media is paid for.
  *
- * Prompt counts are free-form here: the backend validates with
- * `expected_prompts=None`, so adding or removing a prompt is allowed and the
+ * Beat counts are free-form here: the backend validates with
+ * `expected_prompts=None`, so adding or removing a beat is allowed and the
  * media stage adapts to whatever count each item ends up with.
  */
 export default function ItemEditor({ runId, items, onApproved }: Props) {
   const [draft, setDraft] = useState<ItemPayload[]>(() =>
-    items.map((item) => ({ ...item, image_prompts: [...item.image_prompts] })),
+    items.map((item) => ({
+      ...item,
+      beats: item.beats.length
+        ? item.beats.map((beat) => ({ ...beat }))
+        : item.image_prompts.map((prompt) => ({ narration: "", prompt })),
+    })),
   );
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -42,22 +47,29 @@ export default function ItemEditor({ runId, items, onApproved }: Props) {
       ),
     );
 
-  const updatePrompt = (index: number, promptIndex: number, value: string) =>
+  const updateBeat = (index: number, beatIndex: number, patch: Partial<Beat>) =>
     updateItem(index, {
-      image_prompts: draft[index].image_prompts.map((prompt, position) =>
-        position === promptIndex ? value : prompt,
+      beats: draft[index].beats.map((beat, position) =>
+        position === beatIndex ? { ...beat, ...patch } : beat,
       ),
     });
 
-  const addPrompt = (index: number) =>
-    updateItem(index, { image_prompts: [...draft[index].image_prompts, ""] });
-
-  const removePrompt = (index: number, promptIndex: number) =>
+  const addBeat = (index: number) =>
     updateItem(index, {
-      image_prompts: draft[index].image_prompts.filter(
-        (_, position) => position !== promptIndex,
-      ),
+      beats: [...draft[index].beats, { narration: "", prompt: "" }],
     });
+
+  const removeBeat = (index: number, beatIndex: number) =>
+    updateItem(index, {
+      beats: draft[index].beats.filter((_, position) => position !== beatIndex),
+    });
+
+  /** Mirrors the server: the script is the beat narrations, joined. */
+  const derivedDescription = (item: ItemPayload) =>
+    item.beats
+      .map((beat) => beat.narration.trim())
+      .filter(Boolean)
+      .join(" ") || item.description;
 
   const removeItem = (index: number) =>
     setDraft((previous) => previous.filter((_, position) => position !== index));
@@ -109,51 +121,68 @@ export default function ItemEditor({ runId, items, onApproved }: Props) {
             </div>
 
             <div className="space-y-1">
-              <Label htmlFor={`description-${index}`}>
-                Item {index + 1} description
-              </Label>
+              <Label htmlFor={`style-${index}`}>Item {index + 1} style</Label>
               <Textarea
-                id={`description-${index}`}
-                value={item.description}
-                onChange={(event) =>
-                  updateItem(index, { description: event.target.value })
-                }
+                id={`style-${index}`}
+                value={item.style}
+                onChange={(event) => updateItem(index, { style: event.target.value })}
               />
+              <p className="text-xs text-muted-foreground">
+                The recurring figure and setting, redrawn in every frame.
+              </p>
             </div>
 
-            <div className="space-y-2">
-              {item.image_prompts.map((prompt, promptIndex) => (
-                <div key={promptIndex} className="space-y-1">
-                  <Label htmlFor={`prompt-${index}-${promptIndex}`}>
-                    Item {index + 1} prompt {promptIndex + 1}
-                  </Label>
-                  <div className="flex gap-2">
-                    <Input
-                      id={`prompt-${index}-${promptIndex}`}
-                      value={prompt}
-                      onChange={(event) =>
-                        updatePrompt(index, promptIndex, event.target.value)
-                      }
-                    />
+            <div className="space-y-1">
+              <Label>Item {index + 1} narration</Label>
+              <p className="text-sm">{derivedDescription(item)}</p>
+              <p className="text-xs text-muted-foreground">
+                Derived from the beats below. Edit a beat to change it.
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {item.beats.map((beat, beatIndex) => (
+                <div key={beatIndex} className="space-y-1 rounded border p-3">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor={`narration-${index}-${beatIndex}`}>
+                      Item {index + 1} beat {beatIndex + 1} narration
+                    </Label>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      aria-label={`Remove item ${index + 1} prompt ${promptIndex + 1}`}
-                      onClick={() => removePrompt(index, promptIndex)}
+                      aria-label={`Remove item ${index + 1} beat ${beatIndex + 1}`}
+                      onClick={() => removeBeat(index, beatIndex)}
                     >
                       Remove
                     </Button>
                   </div>
+                  <Input
+                    id={`narration-${index}-${beatIndex}`}
+                    value={beat.narration}
+                    onChange={(event) =>
+                      updateBeat(index, beatIndex, { narration: event.target.value })
+                    }
+                  />
+                  <Label htmlFor={`prompt-${index}-${beatIndex}`}>
+                    Item {index + 1} beat {beatIndex + 1} drawing
+                  </Label>
+                  <Input
+                    id={`prompt-${index}-${beatIndex}`}
+                    value={beat.prompt}
+                    onChange={(event) =>
+                      updateBeat(index, beatIndex, { prompt: event.target.value })
+                    }
+                  />
                 </div>
               ))}
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => addPrompt(index)}
+                onClick={() => addBeat(index)}
               >
-                Add prompt
+                Add beat
               </Button>
             </div>
           </CardContent>
