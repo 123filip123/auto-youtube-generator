@@ -2,18 +2,22 @@
 
 ## Overview
 
-This project automatically generates YouTube Shorts-style videos based on a topic you provide. It uses OpenAI APIs to generate a list of items, create images and audio, and then assembles them into a vertical video suitable for YouTube Shorts.
+This project automatically generates YouTube Shorts-style videos based on a topic you provide. It uses OpenAI APIs to write a narrated story for each item, draw the sequence of simple line drawings that illustrates it, and assemble them into a vertical video suitable for YouTube Shorts.
 
 **Pipeline steps:**
 
-1. Generate a validated list of items (titles, descriptions, image prompts) via
-   JSON-schema structured outputs.
-2. Generate every image and voiceover in parallel, capped at
-   `MAX_CONCURRENT_REQUESTS` concurrent API calls.
+1. Generate a validated list of items via JSON-schema structured outputs. Each
+   item carries a style sheet naming its recurring figure, and a sequence of
+   story beats pairing one sentence of narration with the drawing for it.
+2. Generate every image and voiceover in two waves, capped at
+   `MAX_CONCURRENT_REQUESTS` concurrent API calls: first each item's opening
+   frame and its narration, then the remaining frames, each drawn as a
+   continuation of that opening frame so the figure stays recognisable.
 3. Verify every expected asset exists before continuing.
 4. Compose each image onto a blurred 1080x1920 backdrop with its title.
 5. Assemble the titled images and narration into a vertical video with a slow
-   zoom on each image.
+   zoom on each image, holding each frame for as long as the narration it
+   illustrates.
 6. Archive the run — list, audio, images, titled images and the finished video
    — into `generated_data/<topic-slug>/`.
 
@@ -82,6 +86,8 @@ variable of the same name (see `.env.example`). The ones worth knowing:
 | `TTS_VOICE` | `ash` | Narration voice. |
 | `IMAGE_MODEL` | `gpt-image-1` | Image generation. |
 | `IMAGE_QUALITY` | `medium` | `low` is cheaper and faster; `high` is slower and costs more. |
+| `IMAGE_PROMPTS_PER_ITEM` | `3` | Story beats per item. Sets the frame count and, at one sentence per beat, the narration length. |
+| `STORYBOARD_STYLE` | stick-figure line art | The drawing style every frame shares. |
 | `VIDEO_PRESET` | `medium` | x264 preset. `ultrafast` renders quicker at a larger file size. |
 
 ---

@@ -85,11 +85,22 @@ export default function ArchiveDetailPage() {
               ))}
             </div>
 
-            <ul className="list-disc pl-5 text-xs text-muted-foreground">
-              {item.image_prompts.map((prompt, promptIndex) => (
-                <li key={promptIndex}>{prompt}</li>
-              ))}
-            </ul>
+            {item.beats.length > 0 ? (
+              <ol className="space-y-1 text-xs text-muted-foreground">
+                {item.beats.map((beat, beatIndex) => (
+                  <li key={beatIndex}>
+                    <span className="text-foreground">{beat.narration}</span>{" "}
+                    {beat.prompt}
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <ul className="list-disc pl-5 text-xs text-muted-foreground">
+                {item.image_prompts.map((prompt, promptIndex) => (
+                  <li key={promptIndex}>{prompt}</li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
       ))}

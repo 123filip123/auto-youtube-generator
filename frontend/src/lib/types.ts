@@ -101,6 +101,8 @@ export interface ArchiveSummary {
 export interface ArchiveItem {
   title: string;
   description: string;
+  style: string;
+  beats: Beat[];
   image_prompts: string[];
   image_urls: string[];
   titled_image_urls: string[];
