@@ -184,7 +184,7 @@ cd frontend && npm run build
   [Configuration](#configuration) (text, TTS, and image generation).
 - If you hit rate limits, lower `MAX_CONCURRENT_REQUESTS`. Transient failures are
   already retried automatically with exponential backoff.
-- For best results, use a topic that is suitable for list-style videos (e.g., "Amazing Space Facts").
+- For best results, choose a topic that is a single specific question or claim with a surprising answer — the kind of idea that sustains one continuous 60-90 second argument.
 
 ## Demo Video
 
