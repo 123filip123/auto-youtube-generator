@@ -21,7 +21,7 @@ def populated_outputs(tmp_path, monkeypatch):
 
 
 def one_item():
-    return [Item("Dodo", "A bird.", ("a", "b", "c"))]
+    return [Item.from_prompts("Dodo", "A bird.", ("a", "b", "c"))]
 
 
 def test_creates_a_slugged_folder(populated_outputs):

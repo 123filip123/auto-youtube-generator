@@ -3,6 +3,7 @@ import json
 import pytest
 
 from models import (
+    Beat,
     InvalidItemsError,
     Item,
     items_to_json,
@@ -79,7 +80,7 @@ def test_rejects_blank_title():
 
 def test_rejects_wrong_prompt_count():
     broken = dict(VALID_ITEM, image_prompts=["only one"])
-    with pytest.raises(InvalidItemsError, match="item 1.*3 image prompts.*got 1"):
+    with pytest.raises(InvalidItemsError, match="item 1.*3 story beats.*got 1"):
         parse_items([broken], expected_prompts=3)
 
 
@@ -94,7 +95,7 @@ def test_reports_the_offending_index():
 
 
 def test_round_trips_through_disk(tmp_path):
-    items = [Item("Dodo", "A bird.", ("a", "b", "c"))]
+    items = [Item.from_prompts("Dodo", "A bird.", ("a", "b", "c"))]
     target = tmp_path / "list.json"
     save_items(items, target)
     assert load_items(target) == items
@@ -102,18 +103,18 @@ def test_round_trips_through_disk(tmp_path):
 
 def test_saved_json_uses_the_envelope_shape(tmp_path):
     target = tmp_path / "list.json"
-    save_items([Item("Dodo", "A bird.", ("a", "b", "c"))], target)
+    save_items([Item.from_prompts("Dodo", "A bird.", ("a", "b", "c"))], target)
     assert "items" in json.loads(target.read_text())
 
 
 def test_save_creates_parent_directories(tmp_path):
     target = tmp_path / "deep" / "nested" / "list.json"
-    save_items([Item("Dodo", "A bird.", ("a", "b", "c"))], target)
+    save_items([Item.from_prompts("Dodo", "A bird.", ("a", "b", "c"))], target)
     assert target.exists()
 
 
 def test_items_to_json_is_readable():
-    text = items_to_json([Item("Dodo", "A bird.", ("a", "b", "c"))])
+    text = items_to_json([Item.from_prompts("Dodo", "A bird.", ("a", "b", "c"))])
     assert "\n" in text  # indented, not one long line
 
 
@@ -125,3 +126,99 @@ def test_parse_items_rejects_an_empty_image_prompt_list():
     }
     with pytest.raises(InvalidItemsError, match="image_prompts"):
         parse_items(payload, expected_prompts=None)
+
+
+STORYBOARD_ITEM = {
+    "title": "Cavendish",
+    "style": "A scientist with round glasses and a long coat.",
+    "beats": [
+        {"narration": "A scientist set out to weigh the world.",
+         "prompt": "The scientist stands alone."},
+        {"narration": "He hung two spheres from a wire.",
+         "prompt": "The same scientist beside a tall box."},
+        {"narration": "Their pull revealed Earth's mass.",
+         "prompt": "The same scientist leaning in with a notebook."},
+    ],
+}
+
+
+def test_parses_the_storyboard_shape():
+    item = parse_items([STORYBOARD_ITEM])[0]
+    assert item.style == "A scientist with round glasses and a long coat."
+    assert len(item.beats) == 3
+    assert item.beats[0] == Beat(
+        "A scientist set out to weigh the world.", "The scientist stands alone."
+    )
+
+
+def test_description_is_derived_from_the_beat_narrations():
+    item = parse_items([STORYBOARD_ITEM])[0]
+    assert item.description == (
+        "A scientist set out to weigh the world. He hung two spheres from a "
+        "wire. Their pull revealed Earth's mass."
+    )
+
+
+def test_derived_description_overrides_a_stale_stored_one():
+    stale = dict(STORYBOARD_ITEM, description="something else entirely")
+    assert parse_items([stale])[0].description.startswith("A scientist set out")
+
+
+def test_image_prompts_are_derived_from_the_beats():
+    item = parse_items([STORYBOARD_ITEM])[0]
+    assert item.image_prompts == (
+        "The scientist stands alone.",
+        "The same scientist beside a tall box.",
+        "The same scientist leaning in with a notebook.",
+    )
+
+
+def test_legacy_items_become_beats_with_empty_narration():
+    item = parse_items([VALID_ITEM])[0]
+    assert item.style == ""
+    assert item.image_prompts == (
+        "a dodo",
+        "a dodo on a skateboard",
+        "a dodo, watercolour",
+    )
+    assert all(beat.narration == "" for beat in item.beats)
+    assert item.description == "A flightless bird. It lived on Mauritius."
+
+
+def test_an_empty_beats_list_falls_back_to_image_prompts():
+    # The review editor posts `beats: []` alongside legacy `image_prompts`.
+    payload = dict(VALID_ITEM, beats=[])
+    assert len(parse_items([payload])[0].beats) == 3
+
+
+def test_rejects_a_beat_missing_its_prompt():
+    broken = dict(STORYBOARD_ITEM, beats=[{"narration": "x"}])
+    with pytest.raises(InvalidItemsError, match="item 1.*prompt"):
+        parse_items([broken], expected_prompts=None)
+
+
+def test_rejects_a_beat_missing_its_narration():
+    broken = dict(STORYBOARD_ITEM, beats=[{"prompt": "x"}])
+    with pytest.raises(InvalidItemsError, match="item 1 beat 1.*narration"):
+        parse_items([broken], expected_prompts=None)
+
+
+def test_storyboard_round_trips_through_disk(tmp_path):
+    items = parse_items([STORYBOARD_ITEM])
+    target = tmp_path / "list.json"
+    save_items(items, target)
+    assert load_items(target) == items
+
+
+def test_saved_json_carries_style_and_beats(tmp_path):
+    target = tmp_path / "list.json"
+    save_items(parse_items([STORYBOARD_ITEM]), target)
+    saved = json.loads(target.read_text())["items"][0]
+    assert saved["style"] == "A scientist with round glasses and a long coat."
+    assert saved["beats"][0]["narration"] == "A scientist set out to weigh the world."
+
+
+def test_from_prompts_builds_narrationless_beats():
+    item = Item.from_prompts("Dodo", "A bird.", ("a", "b"))
+    assert item.image_prompts == ("a", "b")
+    assert item.description == "A bird."

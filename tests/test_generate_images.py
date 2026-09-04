@@ -35,8 +35,8 @@ def fake_client(b64=None, error=None):
 
 def two_items():
     return [
-        Item("A", "First.", ("a1", "a2", "a3")),
-        Item("B", "Second.", ("b1", "b2", "b3")),
+        Item.from_prompts("A", "First.", ("a1", "a2", "a3")),
+        Item.from_prompts("B", "Second.", ("b1", "b2", "b3")),
     ]
 
 

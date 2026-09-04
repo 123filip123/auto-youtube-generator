@@ -7,7 +7,7 @@ from models import Item
 
 
 def one_item():
-    return [Item("Dodo", "A bird.", ("a", "b", "c"))]
+    return [Item.from_prompts("Dodo", "A bird.", ("a", "b", "c"))]
 
 
 def stub_stages(monkeypatch, *, items=None):
@@ -62,7 +62,7 @@ def test_a_review_run_pauses_until_items_are_approved(tmp_path, monkeypatch):
 
     assert store.get(run.id).status == "awaiting_review"
 
-    edited = [Item("Moa", "A taller bird.", ("x", "y"))]
+    edited = [Item.from_prompts("Moa", "A taller bird.", ("x", "y"))]
     store.approve_items(run.id, edited)
     store.wait_for_idle()
 

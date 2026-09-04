@@ -9,7 +9,7 @@ from utils.paths import audio_path, ensure_output_dirs, image_path, titled_image
 
 
 def one_item():
-    return [Item("Dodo", "A bird.", ("a", "b", "c"))]
+    return [Item.from_prompts("Dodo", "A bird.", ("a", "b", "c"))]
 
 
 def write_media(items, *, skip=()):
@@ -67,7 +67,7 @@ def test_pipeline_error_is_a_runtime_error():
 def test_media_job_total_counts_audio_plus_every_image():
     from pipeline import media_job_total
 
-    items = [Item("A", "d", ("p1", "p2")), Item("B", "d", ("p1",))]
+    items = [Item.from_prompts("A", "d", ("p1", "p2")), Item.from_prompts("B", "d", ("p1",))]
     # 2 narrations + 3 images
     assert media_job_total(items) == 5
 
@@ -75,7 +75,7 @@ def test_media_job_total_counts_audio_plus_every_image():
 def test_titled_job_total_counts_every_image():
     from pipeline import titled_job_total
 
-    items = [Item("A", "d", ("p1", "p2")), Item("B", "d", ("p1",))]
+    items = [Item.from_prompts("A", "d", ("p1", "p2")), Item.from_prompts("B", "d", ("p1",))]
     assert titled_job_total(items) == 3
 
 
@@ -88,7 +88,7 @@ def test_generate_items_stage_saves_the_list_and_logs(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
         "pipeline.generate_list",
-        lambda topic, num_items, client=None: [Item("Dodo", "A bird.", ("a", "b", "c"))],
+        lambda topic, num_items, client=None: [Item.from_prompts("Dodo", "A bird.", ("a", "b", "c"))],
     )
 
     lines = []

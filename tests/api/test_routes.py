@@ -9,7 +9,7 @@ from models import Item
 
 
 def one_item():
-    return [Item("Dodo", "A bird.", ("a", "b", "c"))]
+    return [Item.from_prompts("Dodo", "A bird.", ("a", "b", "c"))]
 
 
 def stub_stages(monkeypatch):

@@ -30,8 +30,8 @@ def fake_client(payload=MP3_BYTES, error=None):
 
 def two_items():
     return [
-        Item("Dodo", "A flightless bird.", ("a", "b", "c")),
-        Item("Moa", "A very tall bird.", ("a", "b", "c")),
+        Item.from_prompts("Dodo", "A flightless bird.", ("a", "b", "c")),
+        Item.from_prompts("Moa", "A very tall bird.", ("a", "b", "c")),
     ]
 
 

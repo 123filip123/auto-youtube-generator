@@ -73,7 +73,7 @@ def test_renders_a_real_video(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "VIDEO_FPS", 6)
     ensure_output_dirs()
 
-    items = [Item("Dodo", "A bird.", ("a", "b", "c"))]
+    items = [Item.from_prompts("Dodo", "A bird.", ("a", "b", "c"))]
     for prompt_number in range(1, 4):
         Image.new("RGB", (108, 192), (20, 40, 60)).save(
             titled_image_path(1, prompt_number)

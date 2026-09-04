@@ -84,7 +84,7 @@ def test_schema_root_is_an_object():
 
 def test_rejects_a_short_prompt_list():
     client = FakeClient(json.dumps(build_payload(count=1, prompts=2)))
-    with pytest.raises(InvalidItemsError, match="3 image prompts"):
+    with pytest.raises(InvalidItemsError, match="3 story beats"):
         generate_list("extinct animals", 1, client=client)
 
 

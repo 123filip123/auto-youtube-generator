@@ -17,10 +17,43 @@ class InvalidItemsError(ValueError):
 
 
 @dataclass(frozen=True)
+class Beat:
+    """One narrated moment and the drawing that illustrates it."""
+
+    narration: str
+    prompt: str
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"narration": self.narration, "prompt": self.prompt}
+
+
+@dataclass(frozen=True)
 class Item:
     title: str
     description: str
-    image_prompts: tuple[str, ...]
+    beats: tuple[Beat, ...]
+    style: str = ""
+
+    @classmethod
+    def from_prompts(
+        cls,
+        title: str,
+        description: str,
+        prompts: Sequence[str],
+        style: str = "",
+    ) -> "Item":
+        """Build an item from bare prompt strings — the pre-storyboard shape."""
+        return cls(
+            title=title,
+            description=description,
+            beats=tuple(Beat("", prompt) for prompt in prompts),
+            style=style,
+        )
+
+    @property
+    def image_prompts(self) -> tuple[str, ...]:
+        """The drawing prompts alone. Keeps pre-storyboard callers working."""
+        return tuple(beat.prompt for beat in self.beats)
 
     @property
     def narration(self) -> str:
@@ -30,8 +63,9 @@ class Item:
     def to_dict(self) -> dict[str, Any]:
         return {
             "title": self.title,
+            "style": self.style,
             "description": self.description,
-            "image_prompts": list(self.image_prompts),
+            "beats": [beat.to_dict() for beat in self.beats],
         }
 
 
@@ -57,6 +91,49 @@ def _required_text(payload: dict, key: str, position: int) -> str:
             f"item {position} is missing a usable '{key}' (got {value!r})"
         )
     return value.strip()
+
+
+def _parse_beats(payload: dict, position: int) -> tuple[Beat, ...]:
+    """Read an item's beats from either the storyboard or the legacy shape.
+
+    An empty `beats` list is treated as absent, not as an error: the review
+    editor posts `beats: []` for items it loaded in the legacy shape.
+    """
+    raw = payload.get("beats")
+    if raw:
+        if not isinstance(raw, list):
+            raise InvalidItemsError(
+                f"item {position} has a malformed 'beats' list "
+                f"(got {type(raw).__name__})"
+            )
+        beats: list[Beat] = []
+        for beat_position, entry in enumerate(raw, start=1):
+            if not isinstance(entry, dict):
+                raise InvalidItemsError(
+                    f"item {position} beat {beat_position} is not an object "
+                    f"(got {type(entry).__name__})"
+                )
+            narration = entry.get("narration")
+            if not isinstance(narration, str):
+                raise InvalidItemsError(
+                    f"item {position} beat {beat_position} is missing a "
+                    f"'narration' string (got {narration!r})"
+                )
+            beats.append(
+                Beat(narration.strip(), _required_text(entry, "prompt", position))
+            )
+        return tuple(beats)
+
+    prompts = payload.get("image_prompts")
+    if (
+        not isinstance(prompts, list)
+        or not prompts
+        or not all(isinstance(p, str) and p.strip() for p in prompts)
+    ):
+        raise InvalidItemsError(
+            f"item {position} is missing a usable 'beats' or 'image_prompts' list"
+        )
+    return tuple(Beat("", prompt.strip()) for prompt in prompts)
 
 
 def parse_items(
@@ -90,28 +167,27 @@ def parse_items(
             )
 
         title = _required_text(payload, "title", position)
-        description = _required_text(payload, "description", position)
+        beats = _parse_beats(payload, position)
 
-        prompts = payload.get("image_prompts")
-        if (
-            not isinstance(prompts, list)
-            or not prompts
-            or not all(isinstance(p, str) and p.strip() for p in prompts)
-        ):
+        if expected_prompts is not None and len(beats) != expected_prompts:
             raise InvalidItemsError(
-                f"item {position} is missing a usable 'image_prompts' list"
+                f"item {position} needs exactly {expected_prompts} story beats, "
+                f"got {len(beats)}"
             )
-        if expected_prompts is not None and len(prompts) != expected_prompts:
-            raise InvalidItemsError(
-                f"item {position} needs exactly {expected_prompts} image prompts, "
-                f"got {len(prompts)}"
-            )
+
+        # Derived whenever the beats carry narration; only the legacy shape,
+        # whose narrations are all empty, falls back to the stored field.
+        narrated = " ".join(beat.narration for beat in beats if beat.narration)
+        description = narrated.strip() or _required_text(
+            payload, "description", position
+        )
 
         items.append(
             Item(
                 title=title,
                 description=description,
-                image_prompts=tuple(p.strip() for p in prompts),
+                beats=beats,
+                style=str(payload.get("style") or "").strip(),
             )
         )
 

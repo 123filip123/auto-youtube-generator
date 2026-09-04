@@ -131,7 +131,7 @@ def test_create_titled_image_raises_on_a_missing_source(tmp_path):
 def test_batch_renders_every_item_prompt(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     Path("outputs/image_output").mkdir(parents=True)
-    items = [Item("Dodo", "A bird.", ("a", "b", "c"))]
+    items = [Item.from_prompts("Dodo", "A bird.", ("a", "b", "c"))]
     for prompt_number in range(1, 4):
         Image.new("RGB", (1024, 1024), (10, 20, 30)).save(
             Path(f"outputs/image_output/item_01_prompt_{prompt_number:02d}.png")
@@ -147,7 +147,7 @@ def test_batch_renders_every_item_prompt(tmp_path, monkeypatch):
 def test_batch_reports_a_missing_source_without_crashing(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     Path("outputs/image_output").mkdir(parents=True)
-    items = [Item("Dodo", "A bird.", ("a", "b", "c"))]
+    items = [Item.from_prompts("Dodo", "A bird.", ("a", "b", "c"))]
     Image.new("RGB", (1024, 1024)).save(
         Path("outputs/image_output/item_01_prompt_01.png")
     )
