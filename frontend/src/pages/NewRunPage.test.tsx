@@ -1,9 +1,16 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import NewRunPage from "./NewRunPage";
+
+const createRun = vi.fn();
+const getConfig = vi.fn();
+vi.mock("@/lib/api", () => ({
+  createRun: (...args: unknown[]) => createRun(...args),
+  getConfig: (...args: unknown[]) => getConfig(...args),
+}));
 
 const navigate = vi.fn();
 vi.mock("react-router-dom", async () => {
@@ -25,24 +32,13 @@ const config = {
   ],
 };
 
-function mockApi(createResponse: { status: number; body: unknown }) {
-  const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
-    if (init?.method === "POST") {
-      return {
-        ok: createResponse.status < 300,
-        status: createResponse.status,
-        statusText: "",
-        json: async () => createResponse.body,
-      };
-    }
-    return { ok: true, status: 200, statusText: "", json: async () => config };
-  });
-  vi.stubGlobal("fetch", fetchMock);
-  return fetchMock;
-}
+beforeEach(() => {
+  getConfig.mockResolvedValue(config);
+});
 
 afterEach(() => {
-  vi.unstubAllGlobals();
+  createRun.mockReset();
+  getConfig.mockReset();
   navigate.mockReset();
 });
 
@@ -56,7 +52,7 @@ function renderPage() {
 
 describe("NewRunPage", () => {
   it("creates a run and navigates to it", async () => {
-    const fetchMock = mockApi({ status: 201, body: { id: "abc" } });
+    createRun.mockResolvedValue({ id: "abc" });
     renderPage();
 
     await userEvent.type(screen.getByLabelText(/topic/i), "Extinct animals");
@@ -64,17 +60,34 @@ describe("NewRunPage", () => {
 
     await waitFor(() => expect(navigate).toHaveBeenCalledWith("/runs/abc"));
 
-    const post = fetchMock.mock.calls.find(([, init]) => init?.method === "POST")!;
-    expect(JSON.parse(post[1]!.body as string)).toEqual({
+    expect(createRun.mock.calls[0][0]).toEqual({
       topic: "Extinct animals",
-      num_items: 5,
-      review_items: false,
+      target_seconds: 85,
+      review_script: false,
       overrides: {},
     });
   });
 
+  it("submits a target length in seconds", async () => {
+    createRun.mockResolvedValue({ id: "abc" });
+    render(<NewRunPage />, { wrapper: MemoryRouter });
+    fireEvent.change(screen.getByLabelText("Topic"), {
+      target: { value: "how dogs evolved from wolves" },
+    });
+    fireEvent.change(screen.getByLabelText("Target length (seconds)"), {
+      target: { value: "60" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /start/i }));
+    await waitFor(() => expect(createRun).toHaveBeenCalled());
+    expect(createRun.mock.calls[0][0]).toMatchObject({
+      topic: "how dogs evolved from wolves",
+      target_seconds: 60,
+      review_script: false,
+    });
+  });
+
   it("sends only the overrides that were filled in", async () => {
-    const fetchMock = mockApi({ status: 201, body: { id: "abc" } });
+    createRun.mockResolvedValue({ id: "abc" });
     renderPage();
 
     await screen.findByLabelText("MAX_RETRIES");
@@ -83,14 +96,13 @@ describe("NewRunPage", () => {
     await userEvent.click(screen.getByRole("button", { name: /start run/i }));
 
     await waitFor(() => expect(navigate).toHaveBeenCalled());
-    const post = fetchMock.mock.calls.find(([, init]) => init?.method === "POST")!;
-    expect(JSON.parse(post[1]!.body as string).overrides).toEqual({
+    expect(createRun.mock.calls[0][0].overrides).toEqual({
       MAX_RETRIES: "9",
     });
   });
 
   it("shows the server's message when a run is already active", async () => {
-    mockApi({ status: 409, body: { detail: "run xyz is still generating_media" } });
+    createRun.mockRejectedValue(new Error("run xyz is still generating_media"));
     renderPage();
 
     await userEvent.type(screen.getByLabelText(/topic/i), "Birds");
@@ -103,13 +115,11 @@ describe("NewRunPage", () => {
   });
 
   it("will not submit a blank topic", async () => {
-    const fetchMock = mockApi({ status: 201, body: { id: "abc" } });
+    createRun.mockResolvedValue({ id: "abc" });
     renderPage();
 
     await userEvent.click(screen.getByRole("button", { name: /start run/i }));
     expect(await screen.findByText(/enter a topic/i)).toBeInTheDocument();
-    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(
-      false,
-    );
+    expect(createRun).not.toHaveBeenCalled();
   });
 });

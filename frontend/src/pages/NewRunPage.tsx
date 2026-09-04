@@ -14,8 +14,8 @@ export default function NewRunPage() {
   const navigate = useNavigate();
 
   const [topic, setTopic] = useState("");
-  const [numItems, setNumItems] = useState(5);
-  const [reviewItems, setReviewItems] = useState(false);
+  const [targetSeconds, setTargetSeconds] = useState(85);
+  const [reviewScript, setReviewScript] = useState(false);
   const [fields, setFields] = useState<ConfigField[]>([]);
   const [current, setCurrent] = useState<Record<string, string | number>>({});
   const [overrides, setOverrides] = useState<Record<string, string>>({});
@@ -55,8 +55,8 @@ export default function NewRunPage() {
     try {
       const run = await createRun({
         topic: topic.trim(),
-        num_items: numItems,
-        review_items: reviewItems,
+        target_seconds: targetSeconds,
+        review_script: reviewScript,
         overrides: filled,
       });
       navigate(`/runs/${run.id}`);
@@ -80,31 +80,35 @@ export default function NewRunPage() {
               id="topic"
               value={topic}
               onChange={(event) => setTopic(event.target.value)}
-              placeholder="Top 5 Extinct Animals"
+              placeholder="how dogs evolved from wolves"
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="num-items">Number of items</Label>
+            <Label htmlFor="target-seconds">Target length (seconds)</Label>
             <Input
-              id="num-items"
+              id="target-seconds"
               type="number"
-              min={1}
-              max={50}
-              value={numItems}
-              onChange={(event) => setNumItems(Number(event.target.value))}
+              min={15}
+              max={180}
+              value={targetSeconds}
+              onChange={(event) => setTargetSeconds(Number(event.target.value))}
               className="w-32"
             />
+            <p className="text-xs text-muted-foreground">
+              Section and image counts follow from this — the script is written
+              to fit, and a drawing lands about every 2.5 seconds.
+            </p>
           </div>
 
           <div className="flex items-center gap-2">
             <Checkbox
               id="review"
-              checked={reviewItems}
-              onCheckedChange={(checked) => setReviewItems(checked === true)}
+              checked={reviewScript}
+              onCheckedChange={(checked) => setReviewScript(checked === true)}
             />
             <Label htmlFor="review" className="font-normal">
-              Let me review the items before generating media
+              Let me review the script before generating media
             </Label>
           </div>
         </CardContent>

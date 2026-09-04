@@ -27,7 +27,7 @@ const VARIANT: Record<StageState, "default" | "secondary" | "outline"> = {
 
 export default function StageProgress({ run }: { run: RunDetail }) {
   const stages = STAGE_SEQUENCE.filter(
-    (stage) => stage.status !== "awaiting_review" || run.review_items,
+    (stage) => stage.status !== "awaiting_review" || run.review_script,
   );
   const currentIndex = stages.findIndex((stage) => stage.status === run.status);
 

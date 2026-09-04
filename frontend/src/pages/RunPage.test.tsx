@@ -30,12 +30,12 @@ function renderPage() {
 const base = {
   id: "abc",
   topic: "Birds",
-  num_items: 2,
+  target_seconds: 60,
   created_at: "2026-09-03T00:00:00Z",
   finished_at: null,
-  review_items: false,
+  review_script: false,
   overrides: {},
-  items: [],
+  script: { topic: "Birds", title: "", style: "", sections: [] },
   assets: [],
   asset_total: 0,
   logs: [],
@@ -51,8 +51,8 @@ describe("RunPage", () => {
       status: "generating_media",
       asset_total: 4,
       assets: [
-        { label: "image item 1 prompt 1", ok: true, error: null },
-        { label: "audio item 1", ok: false, error: "BadRequestError: nope" },
+        { label: "image section 1 prompt 1", ok: true, error: null },
+        { label: "audio section 1", ok: false, error: "BadRequestError: nope" },
       ],
     });
 
@@ -67,6 +67,27 @@ describe("RunPage", () => {
     mockRun({ ...base, status: "failed", error: "PipelineError: no images" });
     renderPage();
     expect(await screen.findByText(/PipelineError: no images/)).toBeInTheDocument();
+  });
+
+  it("renders the script editor when the run is awaiting review", async () => {
+    mockRun({
+      ...base,
+      status: "awaiting_review",
+      review_script: true,
+      script: {
+        topic: "Birds",
+        title: "Birds",
+        style: "line art",
+        sections: [
+          { label: "Intro", narration: "Birds fly.", prompts: ["a bird"], start: 0, end: 3 },
+        ],
+      },
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Review the script")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Birds fly.")).toBeInTheDocument();
   });
 
   it("renders the video and an archive link when the run completed", async () => {
@@ -96,9 +117,9 @@ describe("RunPage", () => {
     mockRun({
       ...base,
       status: "completed",
-      logs: ["Generating 2 items...", "Done."],
+      logs: ["Generating script...", "Done."],
     });
     renderPage();
-    expect(await screen.findByText("Generating 2 items...")).toBeInTheDocument();
+    expect(await screen.findByText("Generating script...")).toBeInTheDocument();
   });
 });

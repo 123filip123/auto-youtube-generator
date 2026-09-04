@@ -8,13 +8,13 @@ function makeRun(overrides: Partial<RunDetail> = {}): RunDetail {
   return {
     id: "abc",
     topic: "Birds",
-    num_items: 2,
+    target_seconds: 60,
     status: "generating_media",
     created_at: "2026-09-03T00:00:00Z",
     finished_at: null,
-    review_items: false,
+    review_script: false,
     overrides: {},
-    items: [],
+    script: { topic: "Birds", title: "", style: "", sections: [] },
     assets: [],
     asset_total: 0,
     logs: [],
@@ -28,7 +28,8 @@ function makeRun(overrides: Partial<RunDetail> = {}): RunDetail {
 describe("StageProgress", () => {
   it("marks stages before the current one as done", () => {
     render(<StageProgress run={makeRun()} />);
-    expect(screen.getByTestId("stage-generating_list")).toHaveTextContent("done");
+    expect(screen.getByTestId("stage-generating_script")).toHaveTextContent("done");
+    expect(screen.getByTestId("stage-generating_prompts")).toHaveTextContent("done");
     expect(screen.getByTestId("stage-generating_media")).toHaveTextContent("running");
     expect(screen.getByTestId("stage-archiving")).toHaveTextContent("pending");
   });
@@ -39,7 +40,7 @@ describe("StageProgress", () => {
   });
 
   it("shows the review stage when review was requested", () => {
-    render(<StageProgress run={makeRun({ review_items: true })} />);
+    render(<StageProgress run={makeRun({ review_script: true })} />);
     expect(screen.getByTestId("stage-awaiting_review")).toBeInTheDocument();
   });
 
