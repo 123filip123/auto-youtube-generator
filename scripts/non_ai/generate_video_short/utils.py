@@ -1,6 +1,7 @@
 """Assemble titled images and narration into per-item video clips."""
 
 from pathlib import Path
+from typing import Sequence
 
 import numpy as np
 from moviepy.editor import (
@@ -13,6 +14,7 @@ from moviepy.editor import (
 from PIL import Image
 
 import config
+from models import Item
 from utils.paths import audio_path, titled_image_path
 
 
@@ -27,12 +29,45 @@ def zoom_scale(t: float, segment_duration: float, end_scale: float) -> float:
     return 1.0 + (end_scale - 1.0) * progress
 
 
-def segment_bounds(total_duration: float, count: int) -> list[tuple[float, float]]:
-    """Split `total_duration` into `count` (start, duration) pairs."""
-    if count < 1:
-        raise ValueError(f"Need at least one image per item, got {count}")
-    segment = total_duration / count
-    return [(index * segment, segment) for index in range(count)]
+def beat_weights(item: Item) -> list[float]:
+    """How long each beat should hold, as the word count of its narration.
+
+    TTS pace is close enough to uniform that word count is a good proxy for
+    elapsed time, and it costs nothing. Items with no narration — every
+    archive written before storyboards — weigh zero and fall back to an
+    equal split.
+    """
+    return [float(len(beat.narration.split())) for beat in item.beats]
+
+
+def segment_bounds(
+    total_duration: float, weights: Sequence[float] | int
+) -> list[tuple[float, float]]:
+    """Split `total_duration` into (start, duration) pairs.
+
+    `weights` may be a count, meaning that many equal segments, or a per-
+    segment weight list. Equal weights produce exactly the even split, so a
+    narrationless item behaves as it always did.
+    """
+    if isinstance(weights, int):
+        weights = [1.0] * weights
+
+    weights = list(weights)
+    if not weights:
+        raise ValueError("Need at least one image per item, got 0")
+
+    total_weight = sum(weights)
+    if total_weight <= 0:
+        weights = [1.0] * len(weights)
+        total_weight = float(len(weights))
+
+    bounds: list[tuple[float, float]] = []
+    start = 0.0
+    for weight in weights:
+        duration = total_duration * weight / total_weight
+        bounds.append((start, duration))
+        start += duration
+    return bounds
 
 
 def build_background_clip(duration: float) -> ColorClip:
@@ -80,17 +115,17 @@ def build_item_audio(item_number: int) -> tuple[CompositeAudioClip, float]:
     return padded, total_duration
 
 
-def build_item_clip(item_number: int, image_count: int):
-    """One item: its images in sequence, over its narration."""
+def build_item_clip(item_number: int, item: Item):
+    """One item: its story frames in sequence, over its narration."""
     audio, total_duration = build_item_audio(item_number)
 
     layers = [build_background_clip(total_duration)]
-    for prompt_number, (start, duration) in enumerate(
-        segment_bounds(total_duration, image_count), start=1
+    for beat_number, (start, duration) in enumerate(
+        segment_bounds(total_duration, beat_weights(item)), start=1
     ):
         layers.append(
             build_image_clip(
-                titled_image_path(item_number, prompt_number), duration, start
+                titled_image_path(item_number, beat_number), duration, start
             )
         )
 

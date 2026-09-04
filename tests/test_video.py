@@ -4,8 +4,12 @@ import pytest
 from PIL import Image
 
 import config
-from models import Item
-from scripts.non_ai.generate_video_short.utils import segment_bounds, zoom_scale
+from models import Beat, Item
+from scripts.non_ai.generate_video_short.utils import (
+    beat_weights,
+    segment_bounds,
+    zoom_scale,
+)
 
 
 def test_zoom_starts_at_one():
@@ -97,3 +101,37 @@ def test_renders_a_real_video(tmp_path, monkeypatch):
     output = generate_video_short(items)
     assert output.exists()
     assert output.stat().st_size > 0
+
+
+def test_segment_bounds_accepts_equal_weights_like_a_count():
+    assert segment_bounds(9.0, [1, 1, 1]) == segment_bounds(9.0, 3)
+
+
+def test_segment_bounds_splits_proportionally_to_the_weights():
+    bounds = segment_bounds(10.0, [1, 4])
+    assert bounds[0] == (0.0, pytest.approx(2.0))
+    assert bounds[1] == (pytest.approx(2.0), pytest.approx(8.0))
+
+
+def test_segment_bounds_still_covers_the_whole_duration_when_weighted():
+    start, duration = segment_bounds(10.0, [3, 1, 5, 2])[-1]
+    assert start + duration == pytest.approx(10.0)
+
+
+def test_segment_bounds_falls_back_to_equal_when_every_weight_is_zero():
+    # Archives written before storyboards have no narration to weigh.
+    assert segment_bounds(9.0, [0, 0, 0]) == segment_bounds(9.0, 3)
+
+
+def test_segment_bounds_rejects_no_weights():
+    with pytest.raises(ValueError):
+        segment_bounds(5.0, [])
+
+
+def test_beat_weights_counts_narration_words():
+    item = Item("T", "d", (Beat("one two three", "p1"), Beat("four", "p2")))
+    assert beat_weights(item) == [3.0, 1.0]
+
+
+def test_beat_weights_are_all_zero_for_legacy_items():
+    assert beat_weights(Item.from_prompts("T", "d", ("a", "b"))) == [0.0, 0.0]

@@ -23,7 +23,7 @@ def generate_video_short(items: Sequence[Item]) -> Path:
     output_path = video_output_path()
 
     clips = [
-        build_item_clip(item_number, len(item.image_prompts))
+        build_item_clip(item_number, item)
         for item_number, item in enumerate(items, start=1)
     ]
 
