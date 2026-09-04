@@ -2900,6 +2900,15 @@ git rm tests/test_generate_list.py tests/test_titled_images.py
 Remove, in this order:
 
 1. `models.py`: `Item`, `Beat`, `InvalidItemsError`, `parse_items`, `items_to_json`, `save_items`, `load_items`, `_required_text`, `_parse_beats`. Keep `_decode` and `_strip_markdown_fences` — `parse_script` uses them.
+
+   **`_decode` currently raises `InvalidItemsError`**, which this step deletes, and
+   `parse_script` wraps the call in a `try/except InvalidItemsError` that rewrites
+   the message with `.replace("Model output", "Script")`. Both must go in the same
+   edit: change `_decode` to raise `InvalidScriptError` directly with the message
+   `f"Script was not valid JSON: {exc}"`, then delete the `try/except` in
+   `parse_script` so it calls `_decode(raw)` plainly. Leaving either half behind
+   breaks the module at import or leaves dead string surgery on an error message
+   no longer produced. `test_parse_script_rejects_non_json` must still pass.
 2. `config.py`: `IMAGE_PROMPTS_PER_ITEM`, `SECONDS_PER_FRAME`, `TITLE_FONT_SIZE`, `TITLE_LINE_SPACING`, `TITLE_SIDE_MARGIN`, `TITLE_GAP_BELOW_IMAGE`, `TITLE_COLOR`.
 3. `utils/paths.py`: `TITLED_IMAGE_OUTPUT_DIR` (and its entry in `ALL_OUTPUT_DIRS`), `LIST_ITEMS_FILENAME`, `ARCHIVED_LIST_FILENAME`, `image_path`, `audio_path`, `titled_image_path`, `list_items_path`.
 4. `scripts/ai/generate_images/generate_images.py`: `anchor_jobs`, `followup_jobs`, `generate_images`.
