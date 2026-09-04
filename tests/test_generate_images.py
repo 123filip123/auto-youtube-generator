@@ -7,7 +7,11 @@ import pytest
 
 from models import Item
 from scripts.ai.generate_images.generate_images import generate_images, image_jobs
-from scripts.ai.generate_images.utils import generate_image
+from scripts.ai.generate_images.utils import (
+    generate_image,
+    generate_image_from_reference,
+    styled_prompt,
+)
 from utils.openai_support import run_all
 
 PNG_BYTES = base64.b64decode(
@@ -20,9 +24,20 @@ class FakeImages:
         self.b64 = b64
         self.error = error
         self.calls = []
+        self.edits = []
 
     def generate(self, **kwargs):
         self.calls.append(kwargs)
+        if self.error:
+            raise self.error
+        return SimpleNamespace(data=[SimpleNamespace(b64_json=self.b64)])
+
+    def edit(self, **kwargs):
+        # The handle is closed once the caller's `with` block exits, so read
+        # it now and record the bytes rather than the file object.
+        recorded = dict(kwargs)
+        recorded["reference_bytes"] = kwargs["image"][0].read()
+        self.edits.append(recorded)
         if self.error:
             raise self.error
         return SimpleNamespace(data=[SimpleNamespace(b64_json=self.b64)])
@@ -132,3 +147,65 @@ def test_jobs_run_correctly_through_the_shared_runner(tmp_path, monkeypatch):
     with ThreadPoolExecutor(max_workers=4) as executor:
         results = run_all(executor, image_jobs(two_items(), client=client))
     assert all(r.ok for r in results)
+
+
+def test_styled_prompt_orders_global_style_then_item_then_beat(monkeypatch):
+    monkeypatch.setattr("config.STORYBOARD_STYLE", "GLOBAL.")
+    assert styled_prompt("ITEM.", "BEAT.") == "GLOBAL. ITEM. BEAT."
+
+
+def test_styled_prompt_skips_a_blank_item_style(monkeypatch):
+    monkeypatch.setattr("config.STORYBOARD_STYLE", "GLOBAL.")
+    assert styled_prompt("", "BEAT.") == "GLOBAL. BEAT."
+
+
+def test_generate_from_reference_sends_the_reference_file(tmp_path):
+    client, images = fake_client(b64=base64.b64encode(PNG_BYTES).decode())
+    reference = tmp_path / "anchor.png"
+    reference.write_bytes(PNG_BYTES)
+    destination = tmp_path / "follow_up.png"
+
+    result = generate_image_from_reference(
+        "beat two", reference, destination, client=client
+    )
+
+    assert result == destination
+    assert destination.read_bytes() == PNG_BYTES
+    assert images.calls == []  # it used edit, not generate
+    assert len(images.edits) == 1
+    assert images.edits[0]["prompt"] == "beat two"
+    assert images.edits[0]["reference_bytes"] == PNG_BYTES
+
+
+def test_generate_from_reference_passes_configured_parameters(tmp_path, monkeypatch):
+    monkeypatch.setattr("config.IMAGE_MODEL", "test-image-model")
+    monkeypatch.setattr("config.IMAGE_QUALITY", "high")
+    client, images = fake_client(b64=base64.b64encode(PNG_BYTES).decode())
+    reference = tmp_path / "anchor.png"
+    reference.write_bytes(PNG_BYTES)
+    generate_image_from_reference(
+        "beat two", reference, tmp_path / "out.png", client=client
+    )
+    assert images.edits[0]["model"] == "test-image-model"
+    assert images.edits[0]["quality"] == "high"
+    assert images.edits[0]["n"] == 1
+
+
+def test_generate_from_reference_fails_loudly_without_an_anchor(tmp_path):
+    client, _ = fake_client(b64=base64.b64encode(PNG_BYTES).decode())
+    with pytest.raises(FileNotFoundError, match="anchor frame"):
+        generate_image_from_reference(
+            "beat two", tmp_path / "missing.png", tmp_path / "out.png", client=client
+        )
+
+
+def test_generate_from_reference_leaves_no_partial_file_on_failure(tmp_path):
+    client, _ = fake_client(b64=None)
+    reference = tmp_path / "anchor.png"
+    reference.write_bytes(PNG_BYTES)
+    destination = tmp_path / "out.png"
+    with pytest.raises(ValueError, match="No image data"):
+        generate_image_from_reference(
+            "beat two", reference, destination, client=client
+        )
+    assert not destination.exists()
