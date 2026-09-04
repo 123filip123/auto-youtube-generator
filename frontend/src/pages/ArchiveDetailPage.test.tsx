@@ -104,6 +104,89 @@ describe("ArchiveDetailPage", () => {
     expect(screen.getByText("One line.")).toBeInTheDocument();
   });
 
+  it("renders both the raw and composed images for a section", async () => {
+    mockJson({
+      slug: "wolves",
+      topic: "wolves",
+      title: "Wolves Domesticated Themselves",
+      style: "A grey-blue wolf.",
+      video_url: null,
+      legacy: false,
+      sections: [
+        {
+          label: "HOOK",
+          narration: "One line.",
+          start: 0,
+          end: 5,
+          prompts: ["p1"],
+          image_urls: ["/raw.png"],
+          composed_image_urls: ["/composed.png"],
+          audio_url: null,
+        },
+      ],
+    });
+    const { container } = renderPage();
+    await screen.findByText("HOOK");
+    const srcs = Array.from(container.querySelectorAll("img")).map((img) =>
+      img.getAttribute("src"),
+    );
+    expect(srcs).toContain("/raw.png");
+    expect(srcs).toContain("/composed.png");
+  });
+
+  it("does not render a composed-frames group when there are none yet", async () => {
+    mockJson({
+      slug: "wolves",
+      topic: "wolves",
+      title: "Wolves Domesticated Themselves",
+      style: "A grey-blue wolf.",
+      video_url: null,
+      legacy: false,
+      sections: [
+        {
+          label: "HOOK",
+          narration: "One line.",
+          start: 0,
+          end: 5,
+          prompts: ["p1"],
+          image_urls: ["/raw.png"],
+          composed_image_urls: [],
+          audio_url: null,
+        },
+      ],
+    });
+    renderPage();
+    await screen.findByText("HOOK");
+    expect(screen.queryByText(/composed frames/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the drawing prompts for a section", async () => {
+    mockJson({
+      slug: "wolves",
+      topic: "wolves",
+      title: "Wolves Domesticated Themselves",
+      style: "A grey-blue wolf.",
+      video_url: null,
+      legacy: false,
+      sections: [
+        {
+          label: "HOOK",
+          narration: "One line.",
+          start: 0,
+          end: 5,
+          prompts: ["a wolf approaching a fire"],
+          image_urls: [],
+          composed_image_urls: [],
+          audio_url: null,
+        },
+      ],
+    });
+    renderPage();
+    expect(
+      await screen.findByText("a wolf approaching a fire"),
+    ).toBeInTheDocument();
+  });
+
   it("explains a legacy archive instead of rendering empty sections", async () => {
     mockJson({
       slug: "old_run",

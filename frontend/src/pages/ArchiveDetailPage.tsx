@@ -69,14 +69,40 @@ export default function ArchiveDetailPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm">{section.narration}</p>
+              {section.prompts.length > 0 && (
+                <ul className="list-disc pl-5 text-xs text-muted-foreground">
+                  {section.prompts.map((prompt, promptIndex) => (
+                    <li key={promptIndex}>{prompt}</li>
+                  ))}
+                </ul>
+              )}
               {section.audio_url && (
                 <audio controls src={section.audio_url} className="w-full" />
               )}
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {section.image_urls.map((url) => (
-                  <img key={url} src={url} alt="" className="w-full rounded" />
-                ))}
-              </div>
+              {section.image_urls.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Generated drawings
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {section.image_urls.map((url) => (
+                      <img key={url} src={url} alt="" className="w-full rounded" />
+                    ))}
+                  </div>
+                </div>
+              )}
+              {section.composed_image_urls.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Composed frames
+                  </p>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {section.composed_image_urls.map((url) => (
+                      <img key={url} src={url} alt="" className="w-full rounded" />
+                    ))}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         ))
