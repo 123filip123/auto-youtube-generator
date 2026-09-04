@@ -76,6 +76,9 @@ def save_script_to_generated_data(
 
     Must run *after* the video is rendered, or the archive has no video in it.
     """
+    # Validate durations before creating the archive directory.
+    timed = with_durations(script, durations)
+
     slug = slugify(script.topic)
     if slug == "untitled":
         slug = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -83,9 +86,12 @@ def save_script_to_generated_data(
     folder = GENERATED_DATA_ROOT / slug
     folder.mkdir(parents=True, exist_ok=True)
 
-    save_script(
-        with_durations(script, durations), folder / ARCHIVED_SCRIPT_FILENAME
-    )
+    save_script(timed, folder / ARCHIVED_SCRIPT_FILENAME)
+
+    # Clear destination subdirectories to remove stale files from previous runs.
+    shutil.rmtree(folder / "audio", ignore_errors=True)
+    shutil.rmtree(folder / "images", ignore_errors=True)
+    shutil.rmtree(folder / "composed_images", ignore_errors=True)
 
     audio_count = _copy_tree(AUDIO_OUTPUT_DIR, folder / "audio", ".mp3")
     image_count = _copy_tree(IMAGE_OUTPUT_DIR, folder / "images", ".png")

@@ -122,3 +122,61 @@ def test_falls_back_to_a_timestamp_slug(tmp_path, monkeypatch):
     folder = save_script_to_generated_data(build_script(topic="!!!"), [4.0, 6.0])
     assert folder.name != "untitled"
     assert folder.name.isdigit() or "_" in folder.name
+
+
+def test_mismatched_durations_raise_and_leave_no_archive(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    script = build_script()  # 2 sections
+    with pytest.raises(ValueError):
+        save_script_to_generated_data(script, [4.0, 6.0, 8.0])  # 3 durations
+    # Verify no archive directory was created
+    assert not (GENERATED_DATA_ROOT / "how_dogs_evolved").exists()
+
+
+def test_rearchiving_clears_stale_files(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    ensure_output_dirs()
+
+    # First run with 4 sections
+    COMPOSED_IMAGE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    (COMPOSED_IMAGE_OUTPUT_DIR / "composed_section_01_shot_01.png").write_bytes(b"1")
+    (COMPOSED_IMAGE_OUTPUT_DIR / "composed_section_02_shot_01.png").write_bytes(b"2")
+    (COMPOSED_IMAGE_OUTPUT_DIR / "composed_section_03_shot_01.png").write_bytes(b"3")
+    (COMPOSED_IMAGE_OUTPUT_DIR / "composed_section_04_shot_01.png").write_bytes(b"4")
+
+    script1 = Script(
+        topic="test",
+        title="Test",
+        style="A style",
+        sections=tuple(
+            Section(f"SECTION{i}", f"Line {i}", ("p1",))
+            for i in range(1, 5)  # 4 sections
+        ),
+    )
+    folder = save_script_to_generated_data(script1, [1.0, 2.0, 3.0, 4.0])
+    assert (folder / "composed_images" / "composed_section_03_shot_01.png").exists()
+
+    # Second run with 2 sections for same topic
+    # Clear the output dir and add only 2 files
+    for f in COMPOSED_IMAGE_OUTPUT_DIR.glob("*"):
+        f.unlink()
+    (COMPOSED_IMAGE_OUTPUT_DIR / "composed_section_01_shot_01.png").write_bytes(b"1b")
+    (COMPOSED_IMAGE_OUTPUT_DIR / "composed_section_02_shot_01.png").write_bytes(b"2b")
+
+    script2 = Script(
+        topic="test",
+        title="Test",
+        style="A style",
+        sections=tuple(
+            Section(f"SECTION{i}", f"Line {i}", ("p1",))
+            for i in range(1, 3)  # 2 sections
+        ),
+    )
+    folder = save_script_to_generated_data(script2, [5.0, 6.0])
+
+    # Verify stale files are gone
+    assert not (folder / "composed_images" / "composed_section_03_shot_01.png").exists()
+    assert not (folder / "composed_images" / "composed_section_04_shot_01.png").exists()
+    # Verify new files exist
+    assert (folder / "composed_images" / "composed_section_01_shot_01.png").exists()
+    assert (folder / "composed_images" / "composed_section_02_shot_01.png").exists()
