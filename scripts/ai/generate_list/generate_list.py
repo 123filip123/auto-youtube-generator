@@ -66,8 +66,28 @@ LIST_JSON_SCHEMA = {
 }
 
 
+# Below this a "sentence" stops being one. The budget clamps rather than
+# going negative when SECONDS_PER_FRAME is set under the pause floor.
+_MIN_WORDS_PER_BEAT = 4
+
+
+def words_per_beat() -> int:
+    """The spoken-word budget for one frame.
+
+    Only the speaking part of a frame buys words — the inter-sentence pause
+    is spent whatever the sentence says. Read at call time so a per-run
+    override of any of the three constants applies.
+    """
+    speaking = config.SECONDS_PER_FRAME - config.NARRATION_SENTENCE_PAUSE_SECONDS
+    return max(
+        _MIN_WORDS_PER_BEAT,
+        round(speaking * config.NARRATION_WORDS_PER_SECOND),
+    )
+
+
 def _build_user_message(topic: str, num_items: int) -> str:
     beat_count = config.IMAGE_PROMPTS_PER_ITEM
+    word_budget = words_per_beat()
     return (
         f"Give me a list of {num_items} items for a YouTube video on the topic: "
         f"'{topic}'.\n"
@@ -76,14 +96,18 @@ def _build_user_message(topic: str, num_items: int) -> str:
         f"1. A very short, concise title (just the main subject/name, no "
         f"additional descriptive text)\n"
         f"2. A 'style' line naming the recurring figure(s) and setting for this "
-        f"item — their build, hair, clothing, props and surroundings — described "
-        f"concretely enough that an illustrator could redraw them identically "
-        f"in every frame. Describe only what is drawn; do not name a medium or "
+        f"item — their build, hair, clothing, props and surroundings, and the "
+        f"colour of each — described concretely enough that an illustrator "
+        f"could redraw them identically in every frame. Name a distinct, "
+        f"vivid colour for each element and avoid white, grey and black: the "
+        f"colours carry the picture, and they must not change from one frame "
+        f"to the next. Describe only what is drawn; do not name a medium or "
         f"an art style.\n"
         f"3. Exactly {beat_count} beats, in order. Each beat has:\n"
-        f"   - 'narration': one sentence of the spoken script. Read in order, "
-        f"the {beat_count} sentences must flow as continuous, informative, "
-        f"intriguing prose about the item.\n"
+        f"   - 'narration': one short sentence of the spoken script, about "
+        f"{word_budget} words, so it is spoken in roughly the time its frame "
+        f"is on screen. Read in order, the {beat_count} sentences must flow as "
+        f"continuous, informative, intriguing prose about the item.\n"
         f"   - 'prompt': what the drawing shows at that moment, written as a "
         f"continuation of the previous drawing. Keep the same figure and the "
         f"same setting, and change or add exactly one thing per beat. Refer "
@@ -97,7 +121,8 @@ def _build_user_message(topic: str, num_items: int) -> str:
         f"- The drawings are plain black outline sketches with stick-figure "
         f"people. Describe simple shapes, poses and objects only.\n"
         f"- Never ask for text, letters, numbers or labels in a drawing.\n"
-        f"- Never ask for colour, shading, texture or photographic detail.\n"
+        f"- Colours are solid flat fills inside the outlines. Never ask for "
+        f"shading, gradients, texture or photographic detail.\n"
         f"\n"
         f"IMPORTANT SAFETY GUIDELINES FOR IMAGE PROMPTS:\n"
         f"- All prompts must be family-friendly and appropriate for all "

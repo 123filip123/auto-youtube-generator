@@ -12,6 +12,11 @@ from models import (
     save_items,
 )
 
+def parse_any(raw):
+    """Parse without the beat-count check; these tests are about shape."""
+    return parse_items(raw, expected_prompts=None)
+
+
 VALID_ITEM = {
     "title": "Dodo",
     "description": "A flightless bird. It lived on Mauritius.",
@@ -20,7 +25,7 @@ VALID_ITEM = {
 
 
 def test_parses_envelope_shape():
-    items = parse_items(json.dumps({"items": [VALID_ITEM]}))
+    items = parse_any(json.dumps({"items": [VALID_ITEM]}))
     assert len(items) == 1
     assert items[0].title == "Dodo"
     assert items[0].image_prompts == (
@@ -31,51 +36,51 @@ def test_parses_envelope_shape():
 
 
 def test_parses_bare_list_shape():
-    items = parse_items(json.dumps([VALID_ITEM]))
+    items = parse_any(json.dumps([VALID_ITEM]))
     assert len(items) == 1
 
 
 def test_parses_already_decoded_python_objects():
-    items = parse_items([VALID_ITEM])
+    items = parse_any([VALID_ITEM])
     assert items[0].title == "Dodo"
 
 
 def test_strips_markdown_fences_for_legacy_files():
     fenced = "```json\n" + json.dumps([VALID_ITEM]) + "\n```"
-    assert len(parse_items(fenced)) == 1
+    assert len(parse_any(fenced)) == 1
 
 
 def test_narration_joins_title_and_description():
-    item = parse_items([VALID_ITEM])[0]
+    item = parse_any([VALID_ITEM])[0]
     assert item.narration == "Dodo. A flightless bird. It lived on Mauritius."
 
 
 def test_item_is_immutable():
-    item = parse_items([VALID_ITEM])[0]
+    item = parse_any([VALID_ITEM])[0]
     with pytest.raises(Exception):
         item.title = "changed"
 
 
 def test_rejects_malformed_json():
     with pytest.raises(InvalidItemsError, match="not valid JSON"):
-        parse_items("{oh no")
+        parse_any("{oh no")
 
 
 def test_rejects_empty_list():
     with pytest.raises(InvalidItemsError, match="no items"):
-        parse_items("[]")
+        parse_any("[]")
 
 
 def test_rejects_missing_field():
     broken = {"title": "Dodo", "image_prompts": ["a", "b", "c"]}
     with pytest.raises(InvalidItemsError, match="item 1.*description"):
-        parse_items([broken])
+        parse_any([broken])
 
 
 def test_rejects_blank_title():
     broken = dict(VALID_ITEM, title="   ")
     with pytest.raises(InvalidItemsError, match="item 1.*title"):
-        parse_items([broken])
+        parse_any([broken])
 
 
 def test_rejects_wrong_prompt_count():
@@ -91,7 +96,7 @@ def test_allows_any_prompt_count_when_expected_is_none():
 
 def test_reports_the_offending_index():
     with pytest.raises(InvalidItemsError, match="item 2"):
-        parse_items([VALID_ITEM, {"title": "x"}])
+        parse_any([VALID_ITEM, {"title": "x"}])
 
 
 def test_round_trips_through_disk(tmp_path):
@@ -143,7 +148,7 @@ STORYBOARD_ITEM = {
 
 
 def test_parses_the_storyboard_shape():
-    item = parse_items([STORYBOARD_ITEM])[0]
+    item = parse_any([STORYBOARD_ITEM])[0]
     assert item.style == "A scientist with round glasses and a long coat."
     assert len(item.beats) == 3
     assert item.beats[0] == Beat(
@@ -152,7 +157,7 @@ def test_parses_the_storyboard_shape():
 
 
 def test_description_is_derived_from_the_beat_narrations():
-    item = parse_items([STORYBOARD_ITEM])[0]
+    item = parse_any([STORYBOARD_ITEM])[0]
     assert item.description == (
         "A scientist set out to weigh the world. He hung two spheres from a "
         "wire. Their pull revealed Earth's mass."
@@ -161,11 +166,11 @@ def test_description_is_derived_from_the_beat_narrations():
 
 def test_derived_description_overrides_a_stale_stored_one():
     stale = dict(STORYBOARD_ITEM, description="something else entirely")
-    assert parse_items([stale])[0].description.startswith("A scientist set out")
+    assert parse_any([stale])[0].description.startswith("A scientist set out")
 
 
 def test_image_prompts_are_derived_from_the_beats():
-    item = parse_items([STORYBOARD_ITEM])[0]
+    item = parse_any([STORYBOARD_ITEM])[0]
     assert item.image_prompts == (
         "The scientist stands alone.",
         "The same scientist beside a tall box.",
@@ -174,7 +179,7 @@ def test_image_prompts_are_derived_from_the_beats():
 
 
 def test_legacy_items_become_beats_with_empty_narration():
-    item = parse_items([VALID_ITEM])[0]
+    item = parse_any([VALID_ITEM])[0]
     assert item.style == ""
     assert item.image_prompts == (
         "a dodo",
@@ -188,7 +193,7 @@ def test_legacy_items_become_beats_with_empty_narration():
 def test_an_empty_beats_list_falls_back_to_image_prompts():
     # The review editor posts `beats: []` alongside legacy `image_prompts`.
     payload = dict(VALID_ITEM, beats=[])
-    assert len(parse_items([payload])[0].beats) == 3
+    assert len(parse_any([payload])[0].beats) == 3
 
 
 def test_rejects_a_beat_missing_its_prompt():
@@ -204,7 +209,7 @@ def test_rejects_a_beat_missing_its_narration():
 
 
 def test_storyboard_round_trips_through_disk(tmp_path):
-    items = parse_items([STORYBOARD_ITEM])
+    items = parse_any([STORYBOARD_ITEM])
     target = tmp_path / "list.json"
     save_items(items, target)
     assert load_items(target) == items
@@ -212,7 +217,7 @@ def test_storyboard_round_trips_through_disk(tmp_path):
 
 def test_saved_json_carries_style_and_beats(tmp_path):
     target = tmp_path / "list.json"
-    save_items(parse_items([STORYBOARD_ITEM]), target)
+    save_items(parse_any([STORYBOARD_ITEM]), target)
     saved = json.loads(target.read_text())["items"][0]
     assert saved["style"] == "A scientist with round glasses and a long coat."
     assert saved["beats"][0]["narration"] == "A scientist set out to weigh the world."

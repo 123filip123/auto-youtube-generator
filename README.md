@@ -7,8 +7,13 @@ This project automatically generates YouTube Shorts-style videos based on a topi
 **Pipeline steps:**
 
 1. Generate a validated list of items via JSON-schema structured outputs. Each
-   item carries a style sheet naming its recurring figure, and a sequence of
-   story beats pairing one sentence of narration with the drawing for it.
+   item carries a style sheet naming its recurring figure and that figure's
+   colours, and a sequence of story beats pairing one short sentence of
+   narration with the drawing for it. Each beat is sized to be spoken in about
+   `SECONDS_PER_FRAME` seconds, so a new drawing lands every few seconds. Note
+   that the voice leaves roughly `NARRATION_SENTENCE_PAUSE_SECONDS` of silence
+   after each sentence, which puts a floor of about three seconds under how
+   short a frame can be.
 2. Generate every image and voiceover in two waves, capped at
    `MAX_CONCURRENT_REQUESTS` concurrent API calls: first each item's opening
    frame and its narration, then the remaining frames, each drawn as a
@@ -86,8 +91,8 @@ variable of the same name (see `.env.example`). The ones worth knowing:
 | `TTS_VOICE` | `ash` | Narration voice. |
 | `IMAGE_MODEL` | `gpt-image-1` | Image generation. |
 | `IMAGE_QUALITY` | `medium` | `low` is cheaper and faster; `high` is slower and costs more. |
-| `IMAGE_PROMPTS_PER_ITEM` | `3` | Story beats per item. Sets the frame count and, at one sentence per beat, the narration length. |
-| `STORYBOARD_STYLE` | stick-figure line art | The drawing style every frame shares. |
+| `IMAGE_PROMPTS_PER_ITEM` | `6` | Frames per item. At `SECONDS_PER_FRAME` each this also sets how long an item runs — six beats is roughly twenty-four seconds. |
+| `STORYBOARD_STYLE` | flat-colour stick-figure line art | The drawing style every frame shares. |
 | `VIDEO_PRESET` | `medium` | x264 preset. `ultrafast` renders quicker at a larger file size. |
 
 ---

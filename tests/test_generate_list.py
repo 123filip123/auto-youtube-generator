@@ -3,11 +3,16 @@ from types import SimpleNamespace
 
 import pytest
 
+import config
 from models import InvalidItemsError
-from scripts.ai.generate_list.generate_list import LIST_JSON_SCHEMA, generate_list
+from scripts.ai.generate_list.generate_list import (
+    LIST_JSON_SCHEMA,
+    generate_list,
+    words_per_beat,
+)
 
 
-def build_payload(count=3, beats=3):
+def build_payload(count=3, beats=6):
     return {
         "items": [
             {
@@ -44,7 +49,7 @@ def test_returns_typed_items():
     items = generate_list("extinct animals", 3, client=client)
     assert len(items) == 3
     assert items[0].title == "Item 1"
-    assert len(items[0].beats) == 3
+    assert len(items[0].beats) == config.IMAGE_PROMPTS_PER_ITEM
     assert items[0].style == "A recurring figure for item 1."
 
 
@@ -88,7 +93,7 @@ def test_schema_root_is_an_object():
 
 def test_rejects_a_short_prompt_list():
     client = FakeClient(json.dumps(build_payload(count=1, beats=2)))
-    with pytest.raises(InvalidItemsError, match="3 story beats"):
+    with pytest.raises(InvalidItemsError, match="6 story beats"):
         generate_list("extinct animals", 1, client=client)
 
 
@@ -138,7 +143,7 @@ def test_prompt_asks_for_a_continuing_sequence():
     generate_list("extinct animals", 3, client=client)
     user_message = client.calls[0]["messages"][1]["content"]
     assert "continuation" in user_message
-    assert "one sentence" in user_message
+    assert "one short sentence" in user_message
 
 
 def test_prompt_states_the_beat_count(monkeypatch):
@@ -146,3 +151,41 @@ def test_prompt_states_the_beat_count(monkeypatch):
     client = FakeClient(json.dumps(build_payload(beats=5)))
     generate_list("extinct animals", 3, client=client)
     assert "Exactly 5 beats" in client.calls[0]["messages"][1]["content"]
+
+
+def test_words_per_beat_discounts_the_pause_between_sentences(monkeypatch):
+    """A frame's budget is speaking time only, not the silence after it."""
+    monkeypatch.setattr("config.NARRATION_WORDS_PER_SECOND", 3.15)
+    monkeypatch.setattr("config.NARRATION_SENTENCE_PAUSE_SECONDS", 1.6)
+
+    monkeypatch.setattr("config.SECONDS_PER_FRAME", 4.0)
+    assert words_per_beat() == 8
+
+    # A shorter frame spends the same pause, so far fewer words fit.
+    monkeypatch.setattr("config.SECONDS_PER_FRAME", 3.5)
+    assert words_per_beat() == 6
+
+
+def test_words_per_beat_never_drops_below_a_speakable_floor(monkeypatch):
+    # The pause alone outlasts a 1s frame, so the raw budget goes negative.
+    # A sentence still has to contain words.
+    monkeypatch.setattr("config.SECONDS_PER_FRAME", 1.0)
+    assert words_per_beat() == 4
+
+
+def test_prompt_states_the_per_beat_word_target(monkeypatch):
+    monkeypatch.setattr("config.NARRATION_WORDS_PER_SECOND", 3.15)
+    monkeypatch.setattr("config.NARRATION_SENTENCE_PAUSE_SECONDS", 1.6)
+    monkeypatch.setattr("config.SECONDS_PER_FRAME", 3.5)
+    client = FakeClient(json.dumps(build_payload()))
+    generate_list("extinct animals", 3, client=client)
+    assert "about 6 words" in client.calls[0]["messages"][1]["content"]
+
+
+def test_prompt_asks_the_style_sheet_to_name_colours():
+    client = FakeClient(json.dumps(build_payload()))
+    generate_list("extinct animals", 3, client=client)
+    user_message = client.calls[0]["messages"][1]["content"]
+    assert "colour" in user_message.lower()
+    # The old brief forbade colour outright; flat fills are the look now.
+    assert "Never ask for colour" not in user_message
