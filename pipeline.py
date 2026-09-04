@@ -12,7 +12,7 @@ from typing import Callable, Sequence
 import config
 from models import Item, save_items
 from scripts.ai.generate_audios.generate_audio import audio_jobs
-from scripts.ai.generate_images.generate_images import image_jobs
+from scripts.ai.generate_images.generate_images import anchor_jobs, followup_jobs
 from scripts.ai.generate_list.generate_list import generate_list
 from scripts.non_ai.create_titled_images_short.create_titled_images_short import (
     create_titled_images_for_items_short,
@@ -54,8 +54,8 @@ def missing_media(items: Sequence[Item]) -> list[Path]:
         candidate = audio_path(item_number)
         if _unusable(candidate):
             missing.append(candidate)
-        for prompt_number in range(1, len(item.image_prompts) + 1):
-            candidate = image_path(item_number, prompt_number)
+        for beat_number in range(1, len(item.image_prompts) + 1):
+            candidate = image_path(item_number, beat_number)
             if _unusable(candidate):
                 missing.append(candidate)
     return missing
@@ -65,8 +65,8 @@ def missing_titled_images(items: Sequence[Item]) -> list[Path]:
     """Every expected titled image that is absent or empty."""
     missing: list[Path] = []
     for item_number, item in enumerate(items, start=1):
-        for prompt_number in range(1, len(item.image_prompts) + 1):
-            candidate = titled_image_path(item_number, prompt_number)
+        for beat_number in range(1, len(item.image_prompts) + 1):
+            candidate = titled_image_path(item_number, beat_number)
             if _unusable(candidate):
                 missing.append(candidate)
     return missing
@@ -121,10 +121,20 @@ def generate_media_stage(
         f"Generating {total} media assets "
         f"({config.MAX_CONCURRENT_REQUESTS} at a time)..."
     )
-    # One shared pool, so image and audio work interleaves under a single cap.
+    # One shared pool across both waves, so every stage stays under one cap.
     with ThreadPoolExecutor(max_workers=config.MAX_CONCURRENT_REQUESTS) as executor:
-        jobs = image_jobs(items, client=client) + audio_jobs(items, client=client)
-        results = run_all(executor, jobs, on_done=on_asset)
+        # Wave one: every item's anchor frame, plus all the narration. Audio
+        # rides along here rather than idling while the anchors are drawn.
+        results = run_all(
+            executor,
+            anchor_jobs(items, client=client) + audio_jobs(items, client=client),
+            on_done=on_asset,
+        )
+        # Wave two: the follow-up frames, each continuing an anchor that now
+        # exists on disk. Built after wave one so a failed anchor is visible.
+        results += run_all(
+            executor, followup_jobs(items, client=client), on_done=on_asset
+        )
 
     failures = describe_failures(results)
     if failures:

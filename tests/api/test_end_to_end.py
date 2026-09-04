@@ -67,15 +67,21 @@ class FakeOpenAI:
         self.chat = SimpleNamespace(
             completions=SimpleNamespace(create=self._chat),
         )
-        self.images = SimpleNamespace(generate=self._image)
+        self.images = SimpleNamespace(generate=self._image, edit=self._edit)
         self.audio = SimpleNamespace(speech=SimpleNamespace(create=self._speech))
         self._audio = audio
+        self.edits = []
 
     def _chat(self, **_kwargs):
         message = SimpleNamespace(content=ITEMS_JSON)
         return SimpleNamespace(choices=[SimpleNamespace(message=message)])
 
     def _image(self, **_kwargs):
+        return SimpleNamespace(data=[SimpleNamespace(b64_json=_png_b64())])
+
+    def _edit(self, **kwargs):
+        """Every frame after the first continues the item's anchor frame."""
+        self.edits.append(kwargs["image"][0].read())
         return SimpleNamespace(data=[SimpleNamespace(b64_json=_png_b64())])
 
     def _speech(self, **_kwargs):
@@ -141,6 +147,11 @@ def test_a_whole_run_through_the_api(tmp_path, monkeypatch):
         # even though the run was started with IMAGE_PROMPTS_PER_ITEM=1.
         assert image_path(1, 1).stat().st_size > 0
         assert image_path(1, 2).stat().st_size > 0
+
+        # The second frame went through the follow-up wave, referencing the
+        # anchor frame rather than being drawn from its prompt alone.
+        assert len(client.edits) == 1
+        assert client.edits[0] == image_path(1, 1).read_bytes()
         assert audio_path(1).stat().st_size > 0
         assert titled_image_path(1, 1).stat().st_size > 0
         assert titled_image_path(1, 2).stat().st_size > 0

@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+import pipeline
 from models import Item
 from pipeline import PipelineError, missing_media, missing_titled_images
 from utils.paths import audio_path, ensure_output_dirs, image_path, titled_image_path
@@ -105,7 +106,8 @@ def test_generate_media_stage_raises_when_an_asset_is_missing(tmp_path, monkeypa
 
     monkeypatch.chdir(tmp_path)
     ensure_output_dirs()
-    monkeypatch.setattr("pipeline.image_jobs", lambda items, client=None: [])
+    monkeypatch.setattr("pipeline.anchor_jobs", lambda items, client=None: [])
+    monkeypatch.setattr("pipeline.followup_jobs", lambda items, client=None: [])
     monkeypatch.setattr("pipeline.audio_jobs", lambda items, client=None: [])
 
     with pytest.raises(PipelineError, match="Media generation"):
@@ -121,10 +123,52 @@ def test_generate_media_stage_forwards_asset_results(tmp_path, monkeypatch):
     write_media(items)
 
     monkeypatch.setattr(
-        "pipeline.image_jobs", lambda items, client=None: [("image 1", lambda: None)]
+        "pipeline.anchor_jobs", lambda items, client=None: [("image 1", lambda: None)]
     )
+    monkeypatch.setattr("pipeline.followup_jobs", lambda items, client=None: [])
     monkeypatch.setattr("pipeline.audio_jobs", lambda items, client=None: [])
 
     seen = []
     generate_media_stage(items, log=lambda _: None, on_asset=seen.append)
     assert [r.label for r in seen] == ["image 1"]
+
+
+def test_media_stage_runs_anchors_before_followups(tmp_path, monkeypatch):
+    """Follow-ups need their anchor on disk, so ordering is not incidental."""
+    monkeypatch.chdir(tmp_path)
+    order = []
+
+    monkeypatch.setattr(
+        "pipeline.anchor_jobs",
+        lambda items, client=None: [("anchor", lambda: order.append("anchor"))],
+    )
+    monkeypatch.setattr(
+        "pipeline.followup_jobs",
+        lambda items, client=None: [("followup", lambda: order.append("followup"))],
+    )
+    monkeypatch.setattr("pipeline.audio_jobs", lambda items, client=None: [])
+    monkeypatch.setattr("pipeline.missing_media", lambda items: [])
+
+    pipeline.generate_media_stage(one_item(), log=lambda message: None)
+    assert order == ["anchor", "followup"]
+
+
+def test_media_stage_reports_every_asset_once(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    seen = []
+    monkeypatch.setattr(
+        "pipeline.anchor_jobs", lambda items, client=None: [("a", lambda: None)]
+    )
+    monkeypatch.setattr(
+        "pipeline.followup_jobs",
+        lambda items, client=None: [("f1", lambda: None), ("f2", lambda: None)],
+    )
+    monkeypatch.setattr(
+        "pipeline.audio_jobs", lambda items, client=None: [("audio", lambda: None)]
+    )
+    monkeypatch.setattr("pipeline.missing_media", lambda items: [])
+
+    pipeline.generate_media_stage(
+        one_item(), log=lambda message: None, on_asset=lambda r: seen.append(r.label)
+    )
+    assert sorted(seen) == ["a", "audio", "f1", "f2"]
