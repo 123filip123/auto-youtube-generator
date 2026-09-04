@@ -80,8 +80,9 @@ SECONDS_PER_IMAGE = 2.5
 # pause term. Instead, the pause term is load-bearing for two reasons:
 # (1) speaking_seconds() uses both to estimate how long a section takes to
 #     narrate, and (2) the word budget calculation uses the pause to trim the
-#     budget downward by roughly 40%, so the generated script does not
-#     overwhelm the available time.
+#     budget down by ~28% (from 268 to 193 words for 85 seconds), preventing
+#     the generated script from overwhelming the available time. Without this
+#     trim, a naive budget would cause the video to overshoot by ~40%.
 NARRATION_WORDS_PER_SECOND = 3.15
 NARRATION_SENTENCE_PAUSE_SECONDS = 1.6
 MAX_CONCURRENT_REQUESTS = _env_int("MAX_CONCURRENT_REQUESTS", 4)

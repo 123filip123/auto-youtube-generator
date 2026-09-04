@@ -25,7 +25,7 @@ def segment_bounds(
 
     `weights` may be a count, meaning that many equal segments, or a per-
     segment weight list. Equal weights produce exactly the even split, so a
-    narrationless item behaves as it always did.
+    section with no narration behaves as it always did.
     """
     if isinstance(weights, int):
         weights = [1.0] * weights
@@ -72,9 +72,9 @@ def build_section_audio(
 ) -> tuple[CompositeAudioClip, float]:
     """One section's narration, padded only where the video actually ends.
 
-    Padding every section — as the per-item version did — puts a silent gap at
-    every interior boundary, which is what makes a concatenation sound like
-    separate clips rather than one continuous video.
+    Without padding at interior boundaries (unlike previous per-item designs),
+    sections blend together to sound like one continuous video rather than
+    separate clips.
     """
     voice = AudioFileClip(str(section_audio_path(section_number)))
     lead = config.INTRO_SILENCE_SECONDS if is_first else 0.0

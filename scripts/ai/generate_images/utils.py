@@ -9,9 +9,9 @@ from utils.open_ai_client import get_open_ai_client
 from utils.openai_support import with_retry
 
 
-def styled_prompt(item_style: str, prompt: str) -> str:
-    """The global look, then the script's style sheet, then the beat itself."""
-    parts = [config.STORYBOARD_STYLE, item_style.strip(), prompt.strip()]
+def styled_prompt(script_style: str, prompt: str) -> str:
+    """The global look, then the script's style sheet, then the shot's prompt."""
+    parts = [config.STORYBOARD_STYLE, script_style.strip(), prompt.strip()]
     return " ".join(part for part in parts if part)
 
 
