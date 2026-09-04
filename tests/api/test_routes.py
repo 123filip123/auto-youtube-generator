@@ -185,3 +185,45 @@ def test_a_built_frontend_is_served_with_an_spa_fallback(tmp_path, monkeypatch):
         assert http.get("/favicon.svg").text == "<svg/>"
         assert http.get("/api/health").json() == {"status": "ok"}
         assert http.get("/api/runs/nope").status_code == 404
+
+
+def test_run_detail_exposes_beats_and_style(client, monkeypatch):
+    stub_stages(monkeypatch)
+    response = client.post("/api/runs", json={"topic": "Birds", "num_items": 1})
+    client.app.state.run_store.wait_for_idle()
+    detail = client.get(f"/api/runs/{response.json()['id']}").json()
+    item = detail["items"][0]
+    assert "style" in item
+    assert item["beats"][0]["prompt"] == item["image_prompts"][0]
+
+
+def test_approving_storyboard_items_derives_the_description(client, monkeypatch):
+    stub_stages(monkeypatch)
+    created = client.post(
+        "/api/runs", json={"topic": "Birds", "num_items": 1, "review_items": True}
+    ).json()
+    client.app.state.run_store.wait_for_status(created["id"], "awaiting_review")
+
+    response = client.post(
+        f"/api/runs/{created['id']}/items",
+        json={
+            "items": [
+                {
+                    "title": "Moa",
+                    "description": "stale text the server must ignore",
+                    "style": "A tall bird.",
+                    "beats": [
+                        {"narration": "A very tall bird.", "prompt": "the bird alone"},
+                        {
+                            "narration": "It could not fly.",
+                            "prompt": "the same bird, wings out",
+                        },
+                    ],
+                }
+            ]
+        },
+    )
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["description"] == "A very tall bird. It could not fly."
+    assert item["image_prompts"] == ["the bird alone", "the same bird, wings out"]

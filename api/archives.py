@@ -108,6 +108,11 @@ def archive_detail(slug: str) -> dict[str, Any]:
             {
                 "title": item.title,
                 "description": item.description,
+                "style": item.style,
+                "beats": [
+                    {"narration": beat.narration, "prompt": beat.prompt}
+                    for beat in item.beats
+                ],
                 "image_prompts": list(item.image_prompts),
                 "image_urls": [
                     _url(slug, "images", name)

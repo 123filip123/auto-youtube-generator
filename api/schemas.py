@@ -13,16 +13,36 @@ from api.runs import Run
 from models import Item
 
 
+class BeatPayload(BaseModel):
+    narration: str
+    prompt: str
+
+
 class ItemPayload(BaseModel):
+    """One item on the wire.
+
+    `description` is output-only: `parse_items` recomputes it from the beat
+    narrations, so a client that edits a narration cannot leave a stale script
+    behind. `image_prompts` is kept so a client holding an item in the
+    pre-storyboard shape can still submit it.
+    """
+
     title: str
-    description: str
-    image_prompts: list[str]
+    description: str = ""
+    style: str = ""
+    beats: list[BeatPayload] = Field(default_factory=list)
+    image_prompts: list[str] = Field(default_factory=list)
 
     @classmethod
     def from_item(cls, item: Item) -> "ItemPayload":
         return cls(
             title=item.title,
             description=item.description,
+            style=item.style,
+            beats=[
+                BeatPayload(narration=beat.narration, prompt=beat.prompt)
+                for beat in item.beats
+            ],
             image_prompts=list(item.image_prompts),
         )
 
@@ -97,6 +117,8 @@ class ArchiveSummaryPayload(BaseModel):
 class ArchiveItemPayload(BaseModel):
     title: str
     description: str
+    style: str = ""
+    beats: list[BeatPayload] = Field(default_factory=list)
     image_prompts: list[str]
     image_urls: list[str]
     titled_image_urls: list[str]

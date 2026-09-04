@@ -92,3 +92,31 @@ def test_archive_detail_rejects_a_malformed_slug(tmp_path, monkeypatch, slug):
     build_archive(tmp_path, "birds")
     with pytest.raises(ArchiveNotFoundError):
         archive_detail(slug)
+
+
+def test_archive_detail_exposes_beats(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    folder = tmp_path / "generated_data" / "birds"
+    folder.mkdir(parents=True)
+    (folder / "list_items.json").write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "title": "Moa",
+                        "style": "A tall bird.",
+                        "beats": [
+                            {
+                                "narration": "A very tall bird.",
+                                "prompt": "the bird alone",
+                            }
+                        ],
+                    }
+                ]
+            }
+        )
+    )
+    detail = archive_detail("birds")
+    assert detail["items"][0]["style"] == "A tall bird."
+    assert detail["items"][0]["beats"][0]["narration"] == "A very tall bird."
+    assert detail["items"][0]["image_prompts"] == ["the bird alone"]
