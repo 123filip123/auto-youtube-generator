@@ -3547,56 +3547,43 @@ git commit -m "feat!: move the HTTP contract from items to sectioned scripts"
 
 ---
 
-### Task 13: The archive browser API, with legacy fallback
+### Task 13: Restore legacy archive support, and reconcile the archive payloads
 
-Old `list_items.json` archives stay visible instead of crashing or vanishing.
+**Rescoped after Task 12.** Task 12 had to migrate `api/archives.py` to the section
+shape early — `api/routes.py` imports `archives` unconditionally, so `tests/api/`
+could not even be collected otherwise. That migration is done and correct, but it
+dropped the legacy handling this task was going to add, and it left two payload
+fields out of step with the plan. So this task no longer migrates anything; it
+repairs three specific gaps in code that already works.
+
+**The gap that matters.** `archive_detail` now raises `ArchiveNotFoundError`
+whenever `script.json` is absent, and `list_archives` reports such folders with
+`section_count: 0` and no marker. Every archive written in the old
+`list_items.json` format is therefore unreachable through the API and
+indistinguishable from an empty one in the listing. The design spec requires that
+nothing already generated disappears from the browser.
 
 **Files:**
 - Modify: `api/archives.py`, `api/schemas.py`, `frontend/src/lib/types.ts`
 - Test: `tests/api/test_archives.py`
 
 **Interfaces:**
-- Produces: `ArchiveSummaryPayload{slug, section_count, image_count, audio_count, has_video, legacy, modified_at}`, `ArchiveSectionPayload{label, narration, prompts, image_urls, composed_image_urls, audio_url}`, `ArchiveDetailPayload{slug, title, style, video_url, legacy, sections}`.
+- Produces: `_read_script(folder) -> Script | None`; `legacy: bool` on
+  `ArchiveSummaryPayload` and `ArchiveDetailPayload`; `start: float` / `end: float`
+  on `ArchiveSectionPayload`.
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `tests/api/test_archives.py`:
+Append to `tests/api/test_archives.py`. Reuse whatever archive-building helpers the
+file already has from Task 12 rather than writing new ones; add a legacy builder:
 
 ```python
-import json
-
-from models import Script, Section, save_script
-from utils.paths import ARCHIVED_SCRIPT_FILENAME, GENERATED_DATA_ROOT, VIDEO_FILENAME
-
-
-def write_script_archive(root, slug="wolves"):
-    folder = root / GENERATED_DATA_ROOT / slug
-    folder.mkdir(parents=True, exist_ok=True)
-    save_script(
-        Script(
-            topic="wolves",
-            title="Wolves Domesticated Themselves",
-            style="A grey-blue wolf.",
-            sections=(Section("HOOK", "One line.", ("p1", "p2"), 0.0, 5.0),),
-        ),
-        folder / ARCHIVED_SCRIPT_FILENAME,
-    )
-    (folder / "images").mkdir(exist_ok=True)
-    (folder / "images" / "section_01_shot_01.png").write_bytes(b"png")
-    (folder / "images" / "section_01_shot_02.png").write_bytes(b"png")
-    (folder / "composed_images").mkdir(exist_ok=True)
-    (folder / "composed_images" / "composed_section_01_shot_01.png").write_bytes(b"png")
-    (folder / "audio").mkdir(exist_ok=True)
-    (folder / "audio" / "section_01.mp3").write_bytes(b"mp3")
-    (folder / VIDEO_FILENAME).write_bytes(b"mp4")
-    return folder
-
-
 def write_legacy_archive(root, slug="old_run"):
+    """An archive in the pre-migration shape: list_items.json, item_* filenames."""
     folder = root / GENERATED_DATA_ROOT / slug
     folder.mkdir(parents=True, exist_ok=True)
     (folder / "list_items.json").write_text(
-        json.dumps([{"title": "Old", "description": "d", "image_prompts": ["p"]}])
+        json.dumps([{"title": "Dodo", "description": "A bird.", "image_prompts": ["p"]}])
     )
     (folder / "images").mkdir(exist_ok=True)
     (folder / "images" / "item_01_prompt_01.png").write_bytes(b"png")
@@ -3604,38 +3591,9 @@ def write_legacy_archive(root, slug="old_run"):
     return folder
 
 
-def test_lists_a_script_archive(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    write_script_archive(tmp_path)
-    from api import archives
-
-    summary = archives.list_archives()[0]
-    assert summary["slug"] == "wolves"
-    assert summary["section_count"] == 1
-    assert summary["image_count"] == 2
-    assert summary["legacy"] is False
-
-
-def test_detail_groups_media_by_section(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    write_script_archive(tmp_path)
-    from api import archives
-
-    detail = archives.archive_detail("wolves")
-    assert detail["title"] == "Wolves Domesticated Themselves"
-    assert detail["legacy"] is False
-    section = detail["sections"][0]
-    assert section["label"] == "HOOK"
-    assert len(section["image_urls"]) == 2
-    assert len(section["composed_image_urls"]) == 1
-    assert section["audio_url"].endswith("section_01.mp3")
-
-
 def test_a_legacy_archive_is_listed_and_flagged(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     write_legacy_archive(tmp_path)
-    from api import archives
-
     summary = archives.list_archives()[0]
     assert summary["legacy"] is True
     assert summary["section_count"] == 0
@@ -3643,68 +3601,71 @@ def test_a_legacy_archive_is_listed_and_flagged(tmp_path, monkeypatch):
     assert summary["has_video"] is True
 
 
-def test_a_legacy_archive_detail_has_no_sections_but_keeps_its_video(
-    tmp_path, monkeypatch
-):
+def test_a_legacy_archive_detail_keeps_its_video_and_does_not_raise(tmp_path, monkeypatch):
+    """The whole point: an old run must not vanish from the browser."""
     monkeypatch.chdir(tmp_path)
     write_legacy_archive(tmp_path)
-    from api import archives
-
     detail = archives.archive_detail("old_run")
     assert detail["legacy"] is True
     assert detail["sections"] == []
     assert detail["video_url"].endswith(VIDEO_FILENAME)
 
 
+def test_a_current_archive_is_not_flagged_legacy(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    write_script_archive(tmp_path)
+    assert archives.list_archives()[0]["legacy"] is False
+    assert archives.archive_detail("wolves")["legacy"] is False
+
+
+def test_an_archive_with_unreadable_script_is_treated_as_legacy(tmp_path, monkeypatch):
+    """Corrupt JSON must degrade to legacy, not 404 the whole archive."""
+    monkeypatch.chdir(tmp_path)
+    folder = write_script_archive(tmp_path)
+    (folder / ARCHIVED_SCRIPT_FILENAME).write_text("{ not json")
+    assert archives.archive_detail("wolves")["legacy"] is True
+
+
 def test_an_unknown_slug_still_raises(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    from api import archives
-
     with pytest.raises(archives.ArchiveNotFoundError):
         archives.archive_detail("nope")
 
 
-def test_a_traversal_slug_is_rejected(tmp_path, monkeypatch):
+def test_a_traversal_slug_is_still_rejected(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    from api import archives
-
     with pytest.raises(archives.ArchiveNotFoundError):
         archives.archive_detail("../etc")
+
+
+def test_sections_carry_their_timings(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    write_script_archive(tmp_path)
+    section = archives.archive_detail("wolves")["sections"][0]
+    assert section["start"] == 0.0
+    assert section["end"] == 5.0
 ```
+
+The `write_script_archive` helper must save a script whose first section has
+`start=0.0, end=5.0` for the last test. Adjust the existing helper if needed.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
 Run: `venv/bin/pytest tests/api/test_archives.py -v`
-Expected: FAIL — `ImportError: cannot import name 'load_items'` in `api/archives.py`.
+Expected: FAIL — `KeyError: 'legacy'` and `ArchiveNotFoundError` for the legacy cases.
 
-- [ ] **Step 3: Rewrite `api/archives.py`**
+- [ ] **Step 3: Add the legacy reader**
 
-Replace the item-shaped helpers with section-shaped ones:
+In `api/archives.py`, replace the inline `load_script` calls with one helper:
 
 ```python
-"""Read `generated_data/` into payloads the archive browser can render.
-
-Filenames are the join key: `images/section_04_shot_02.png` belongs to
-section 4. Archives written before sectioned scripts carry a `list_items.json`
-this module cannot parse; rather than migrating them, they are reported as
-`legacy` — slug, media counts and video only. Nothing already generated
-disappears from the browser, and no parsing code for the dead format survives.
-"""
-
-def _names_for_section(directory: Path, section_number: int, suffix: str) -> list[str]:
-    """Every file in `directory` belonging to this section, in shot order."""
-    if not directory.is_dir():
-        return []
-    marker = f"section_{section_number:02d}_"
-    return sorted(
-        entry.name
-        for entry in directory.iterdir()
-        if entry.is_file() and entry.suffix == suffix and marker in entry.name
-    )
-
-
 def _read_script(folder: Path) -> Script | None:
-    """The archived script, or None if this is a pre-script archive."""
+    """The archived script, or None if this is a pre-migration archive.
+
+    Returning None rather than raising is the whole point: an archive written
+    before sectioned scripts, or one whose script.json is corrupt, must still
+    be browsable for its video and media rather than 404ing.
+    """
     listing = folder / ARCHIVED_SCRIPT_FILENAME
     if not listing.is_file():
         return None
@@ -3714,9 +3675,10 @@ def _read_script(folder: Path) -> Script | None:
         return None
 ```
 
-`list_archives` builds each summary with `script = _read_script(folder)`, then:
+`list_archives` uses it and adds the flag:
 
 ```python
+        script = _read_script(folder)
         summaries.append(
             {
                 "slug": folder.name,
@@ -3730,7 +3692,7 @@ def _read_script(folder: Path) -> Script | None:
         )
 ```
 
-`archive_detail` becomes:
+`archive_detail` stops raising for a missing script and returns the legacy shape:
 
 ```python
 def archive_detail(slug: str) -> dict[str, Any]:
@@ -3741,93 +3703,36 @@ def archive_detail(slug: str) -> dict[str, Any]:
     video_url = _url(slug, VIDEO_FILENAME) if video.is_file() else None
 
     if script is None:
-        # A pre-script archive: everything we can still say about it.
+        # A pre-migration archive: everything we can still honestly say about it.
         return {
             "slug": slug,
+            "topic": slug.replace("_", " "),
             "title": slug.replace("_", " "),
             "style": "",
             "video_url": video_url,
             "legacy": True,
             "sections": [],
         }
-
-    sections: list[dict[str, Any]] = []
-    for section_number, section in enumerate(script.sections, start=1):
-        audio_name = f"section_{section_number:02d}.mp3"
-        has_audio = (folder / "audio" / audio_name).is_file()
-        sections.append(
-            {
-                "label": section.label,
-                "narration": section.narration,
-                "start": section.start,
-                "end": section.end,
-                "prompts": list(section.prompts),
-                "image_urls": [
-                    _url(slug, "images", name)
-                    for name in _names_for_section(
-                        folder / "images", section_number, ".png"
-                    )
-                ],
-                "composed_image_urls": [
-                    _url(slug, "composed_images", name)
-                    for name in _names_for_section(
-                        folder / "composed_images", section_number, ".png"
-                    )
-                ],
-                "audio_url": _url(slug, "audio", audio_name) if has_audio else None,
-            }
-        )
-
-    return {
-        "slug": slug,
-        "title": script.title,
-        "style": script.style,
-        "video_url": video_url,
-        "legacy": False,
-        "sections": sections,
-    }
 ```
 
-Note `archive_detail` no longer raises when the listing is missing — a legacy or media-only folder is a valid archive to browse. `_archive_dir` still raises `ArchiveNotFoundError` for an unknown or traversal slug, which is what the tests assert.
+The existing section-building loop follows unchanged, except that each section
+dict gains `"start": section.start` and `"end": section.end`, and the final
+return gains `"legacy": False`.
 
-Update the imports to `from models import InvalidScriptError, Script, load_script` and `from utils.paths import ARCHIVED_SCRIPT_FILENAME, GENERATED_DATA_ROOT, VIDEO_FILENAME`.
+`_archive_dir` keeps raising `ArchiveNotFoundError` for an unknown or traversal
+slug — that behaviour must not change.
 
-- [ ] **Step 4: Update the archive payloads**
+- [ ] **Step 4: Add the payload fields**
 
-In `api/schemas.py`:
+In `api/schemas.py`: add `legacy: bool = False` to `ArchiveSummaryPayload` and
+`ArchiveDetailPayload`; add `start: float = 0.0` and `end: float = 0.0` to
+`ArchiveSectionPayload`. Keep `ArchiveDetailPayload.topic` — it was added in
+Task 12 and is the only way the browser can show the original topic, since the
+slug is a lossy transform of it.
 
-```python
-class ArchiveSummaryPayload(BaseModel):
-    slug: str
-    section_count: int
-    image_count: int
-    audio_count: int
-    has_video: bool
-    legacy: bool = False
-    modified_at: str
-
-
-class ArchiveSectionPayload(BaseModel):
-    label: str
-    narration: str
-    start: float = 0.0
-    end: float = 0.0
-    prompts: list[str] = Field(default_factory=list)
-    image_urls: list[str] = Field(default_factory=list)
-    composed_image_urls: list[str] = Field(default_factory=list)
-    audio_url: str | None = None
-
-
-class ArchiveDetailPayload(BaseModel):
-    slug: str
-    title: str = ""
-    style: str = ""
-    video_url: str | None = None
-    legacy: bool = False
-    sections: list[ArchiveSectionPayload] = Field(default_factory=list)
-```
-
-Mirror all three in `frontend/src/lib/types.ts` as `ArchiveSummary`, `ArchiveSection` and `ArchiveDetail`.
+Mirror all three in `frontend/src/lib/types.ts` (`ArchiveSummary`,
+`ArchiveDetail`, `ArchiveSection`) so the two files stay field-for-field
+identical, as `api/schemas.py`'s docstring requires.
 
 - [ ] **Step 5: Run the tests**
 
@@ -3838,7 +3743,7 @@ Expected: PASS.
 
 ```bash
 git add api frontend/src/lib/types.ts tests/api/test_archives.py
-git commit -m "feat: browse script archives, keeping old runs as legacy"
+git commit -m "feat: keep pre-migration archives browsable as legacy"
 ```
 
 ---
