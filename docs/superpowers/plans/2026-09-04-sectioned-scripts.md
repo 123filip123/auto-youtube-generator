@@ -2911,7 +2911,7 @@ Remove, in this order:
    no longer produced. `test_parse_script_rejects_non_json` must still pass.
 2. `config.py`: `IMAGE_PROMPTS_PER_ITEM`, `SECONDS_PER_FRAME`, `TITLE_FONT_SIZE`, `TITLE_LINE_SPACING`, `TITLE_SIDE_MARGIN`, `TITLE_GAP_BELOW_IMAGE`, `TITLE_COLOR`.
 3. `utils/paths.py`: `TITLED_IMAGE_OUTPUT_DIR` (and its entry in `ALL_OUTPUT_DIRS`), `LIST_ITEMS_FILENAME`, `ARCHIVED_LIST_FILENAME`, `image_path`, `audio_path`, `titled_image_path`, `list_items_path`.
-4. `scripts/ai/generate_images/generate_images.py`: `anchor_jobs`, `followup_jobs`, `generate_images`.
+4. `scripts/ai/generate_images/generate_images.py`: `anchor_jobs`, `followup_jobs`, `generate_images`. Also **rewrite the module docstring** — it still describes the old two-wave anchor/follow-up design ("Frames 2..N of an item are drawn as continuations of frame 1... Splitting them into two waves...") which is now the opposite of what the module does. Replace it with a description of per-section chains that reset at the boundary.
 5. `scripts/ai/generate_audios/`: `generate_audio_for_item`, `audio_jobs`, `generate_audio_for_items`.
 6. `scripts/non_ai/generate_video_short/`: `beat_weights`, `build_item_audio`, `build_item_clip`, `generate_video_short`.
 7. `scripts/non_ai/save_to_generated_data/`: `save_to_generated_data`.
