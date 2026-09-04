@@ -6,9 +6,10 @@ from utils.open_ai_client import get_open_ai_client
 from utils.openai_support import with_retry
 
 SYSTEM_MESSAGE = (
-    "You are a helpful assistant that generates a list of interesting facts, "
-    "places, or concepts, along with creative image prompts. Always ensure all "
-    "content is family-friendly and appropriate for all audiences."
+    "You are a storyboard writer. For each subject you write a short narrated "
+    "story and the sequence of simple line drawings that illustrates it, where "
+    "each drawing continues the one before it. Always ensure all content is "
+    "family-friendly and appropriate for all audiences."
 )
 
 LIST_JSON_SCHEMA = {
@@ -24,17 +25,38 @@ LIST_JSON_SCHEMA = {
                         "type": "string",
                         "description": "Very short subject name, no extra words.",
                     },
-                    "description": {
+                    "style": {
                         "type": "string",
-                        "description": "Two informative, intriguing sentences.",
+                        "description": (
+                            "The recurring figure(s) and setting for this "
+                            "item's drawings, described concretely enough to "
+                            "be redrawn identically every time."
+                        ),
                     },
-                    "image_prompts": {
+                    "beats": {
                         "type": "array",
-                        "description": "Image generation prompts for this item.",
-                        "items": {"type": "string"},
+                        "description": "The story beats, in narration order.",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "narration": {
+                                    "type": "string",
+                                    "description": "One spoken sentence.",
+                                },
+                                "prompt": {
+                                    "type": "string",
+                                    "description": (
+                                        "The drawing for this sentence, as a "
+                                        "continuation of the previous one."
+                                    ),
+                                },
+                            },
+                            "required": ["narration", "prompt"],
+                            "additionalProperties": False,
+                        },
                     },
                 },
-                "required": ["title", "description", "image_prompts"],
+                "required": ["title", "style", "beats"],
                 "additionalProperties": False,
             },
         }
@@ -45,22 +67,37 @@ LIST_JSON_SCHEMA = {
 
 
 def _build_user_message(topic: str, num_items: int) -> str:
-    prompt_count = config.IMAGE_PROMPTS_PER_ITEM
+    beat_count = config.IMAGE_PROMPTS_PER_ITEM
     return (
         f"Give me a list of {num_items} items for a YouTube video on the topic: "
         f"'{topic}'.\n"
-        f"Each item must have:\n"
+        f"Each item is a tiny narrated story told through a sequence of simple "
+        f"line drawings. Every item must have:\n"
         f"1. A very short, concise title (just the main subject/name, no "
         f"additional descriptive text)\n"
-        f"2. A 2 sentence description that is informative and intriguing\n"
-        f"3. Exactly {prompt_count} different image_prompts that would create "
-        f"engaging visuals for this item:\n"
-        f"   - First prompt: A straightforward, clear representation of the "
-        f"item. The prompt should just be the item name.\n"
-        f"   - Second prompt: The item in a creative setting. Should be "
-        f"hilariously funny and creative.\n"
-        f"   - Third prompt: The item in a different style or perspective than "
-        f"the first two. Should be a bit more creative and unique.\n"
+        f"2. A 'style' line naming the recurring figure(s) and setting for this "
+        f"item — their build, hair, clothing, props and surroundings — described "
+        f"concretely enough that an illustrator could redraw them identically "
+        f"in every frame. Describe only what is drawn; do not name a medium or "
+        f"an art style.\n"
+        f"3. Exactly {beat_count} beats, in order. Each beat has:\n"
+        f"   - 'narration': one sentence of the spoken script. Read in order, "
+        f"the {beat_count} sentences must flow as continuous, informative, "
+        f"intriguing prose about the item.\n"
+        f"   - 'prompt': what the drawing shows at that moment, written as a "
+        f"continuation of the previous drawing. Keep the same figure and the "
+        f"same setting, and change or add exactly one thing per beat. Refer "
+        f"back explicitly, for example 'the same scientist, now beside the "
+        f"apparatus'.\n"
+        f"The first beat establishes the subject alone. Each later beat adds "
+        f"the element its sentence introduces, so the drawings track the "
+        f"narration as it plays.\n"
+        f"\n"
+        f"DRAWING CONSTRAINTS:\n"
+        f"- The drawings are plain black outline sketches with stick-figure "
+        f"people. Describe simple shapes, poses and objects only.\n"
+        f"- Never ask for text, letters, numbers or labels in a drawing.\n"
+        f"- Never ask for colour, shading, texture or photographic detail.\n"
         f"\n"
         f"IMPORTANT SAFETY GUIDELINES FOR IMAGE PROMPTS:\n"
         f"- All prompts must be family-friendly and appropriate for all "
@@ -118,7 +155,7 @@ def generate_list(topic: str, num_items: int = 5, *, client=None) -> list[Item]:
     """Generate `num_items` validated items for `topic`.
 
     Raises `InvalidItemsError` if the model's output does not match the
-    expected shape, including a wrong number of image prompts.
+    expected shape, including a wrong number of story beats.
     """
     if num_items < 1:
         raise ValueError(f"num_items must be at least 1, got {num_items}")

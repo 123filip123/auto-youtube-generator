@@ -36,7 +36,14 @@ OVERRIDABLE: tuple[OverridableField, ...] = (
         "Higher costs more and takes longer.",
     ),
     OverridableField(
-        "IMAGE_PROMPTS_PER_ITEM", "int", None, "Images generated for each item."
+        "STORYBOARD_STYLE", "str", None, "The drawing style every frame shares."
+    ),
+    OverridableField(
+        "IMAGE_PROMPTS_PER_ITEM",
+        "int",
+        None,
+        "Story beats per item. Sets both the frame count and, at one sentence "
+        "per beat, the narration length.",
     ),
     OverridableField("MAX_CONCURRENT_REQUESTS", "int", None, "Parallel OpenAI calls."),
     OverridableField("MAX_RETRIES", "int", None, "Attempts per call."),

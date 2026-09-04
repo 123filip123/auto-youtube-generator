@@ -7,13 +7,16 @@ from models import InvalidItemsError
 from scripts.ai.generate_list.generate_list import LIST_JSON_SCHEMA, generate_list
 
 
-def build_payload(count=3, prompts=3):
+def build_payload(count=3, beats=3):
     return {
         "items": [
             {
                 "title": f"Item {i}",
-                "description": f"Description {i}. Second sentence.",
-                "image_prompts": [f"prompt {i}.{j}" for j in range(prompts)],
+                "style": f"A recurring figure for item {i}.",
+                "beats": [
+                    {"narration": f"Sentence {i}.{j}.", "prompt": f"prompt {i}.{j}"}
+                    for j in range(beats)
+                ],
             }
             for i in range(1, count + 1)
         ]
@@ -41,7 +44,8 @@ def test_returns_typed_items():
     items = generate_list("extinct animals", 3, client=client)
     assert len(items) == 3
     assert items[0].title == "Item 1"
-    assert len(items[0].image_prompts) == 3
+    assert len(items[0].beats) == 3
+    assert items[0].style == "A recurring figure for item 1."
 
 
 def test_requests_a_strict_json_schema():
@@ -83,7 +87,7 @@ def test_schema_root_is_an_object():
 
 
 def test_rejects_a_short_prompt_list():
-    client = FakeClient(json.dumps(build_payload(count=1, prompts=2)))
+    client = FakeClient(json.dumps(build_payload(count=1, beats=2)))
     with pytest.raises(InvalidItemsError, match="3 story beats"):
         generate_list("extinct animals", 1, client=client)
 
@@ -110,6 +114,35 @@ def test_validates_against_the_current_prompt_count(monkeypatch):
     # The count must be read when generate_list runs, not when it is imported,
     # so a per-run override applies.
     monkeypatch.setattr("config.IMAGE_PROMPTS_PER_ITEM", 2)
-    client = FakeClient(json.dumps(build_payload(count=1, prompts=2)))
+    client = FakeClient(json.dumps(build_payload(count=1, beats=2)))
     items = generate_list("birds", 1, client=client)
     assert len(items[0].image_prompts) == 2
+
+
+def test_schema_requires_style_and_beats():
+    item_schema = LIST_JSON_SCHEMA["properties"]["items"]["items"]
+    assert set(item_schema["required"]) == {"title", "style", "beats"}
+    beat_schema = item_schema["properties"]["beats"]["items"]
+    assert set(beat_schema["required"]) == {"narration", "prompt"}
+
+
+def test_rejects_the_wrong_number_of_beats(monkeypatch):
+    monkeypatch.setattr("config.IMAGE_PROMPTS_PER_ITEM", 3)
+    client = FakeClient(json.dumps(build_payload(count=1, beats=2)))
+    with pytest.raises(InvalidItemsError, match="3 story beats"):
+        generate_list("extinct animals", 1, client=client)
+
+
+def test_prompt_asks_for_a_continuing_sequence():
+    client = FakeClient(json.dumps(build_payload()))
+    generate_list("extinct animals", 3, client=client)
+    user_message = client.calls[0]["messages"][1]["content"]
+    assert "continuation" in user_message
+    assert "one sentence" in user_message
+
+
+def test_prompt_states_the_beat_count(monkeypatch):
+    monkeypatch.setattr("config.IMAGE_PROMPTS_PER_ITEM", 5)
+    client = FakeClient(json.dumps(build_payload(beats=5)))
+    generate_list("extinct animals", 3, client=client)
+    assert "Exactly 5 beats" in client.calls[0]["messages"][1]["content"]

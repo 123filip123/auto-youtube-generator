@@ -59,3 +59,10 @@ def test_apply_overrides_restores_after_an_exception():
         with apply_overrides({"MAX_RETRIES": 1}):
             raise RuntimeError("boom")
     assert config.MAX_RETRIES == original
+
+
+def test_storyboard_style_is_overridable():
+    assert any(field.name == "STORYBOARD_STYLE" for field in OVERRIDABLE)
+    assert validate_overrides({"STORYBOARD_STYLE": "  crayon doodles  "}) == {
+        "STORYBOARD_STYLE": "crayon doodles"
+    }

@@ -55,6 +55,15 @@ IMAGE_MODEL = _env_str("IMAGE_MODEL", "gpt-image-1")
 IMAGE_SIZE = _env_str("IMAGE_SIZE", "1024x1024")
 IMAGE_QUALITY = _env_str("IMAGE_QUALITY", "medium")
 
+# The fixed look every generated frame shares. Prepended to every image
+# prompt, in front of the item's own style sheet.
+STORYBOARD_STYLE = _env_str(
+    "STORYBOARD_STYLE",
+    "Black ink outline drawing on a plain white background. Stick-figure "
+    "people with simple round heads and minimal interior detail. Clean even "
+    "line weight, no shading, no colour, no text or lettering.",
+)
+
 # --- Pipeline shape ------------------------------------------------------
 IMAGE_PROMPTS_PER_ITEM = _env_int("IMAGE_PROMPTS_PER_ITEM", 3)
 MAX_CONCURRENT_REQUESTS = _env_int("MAX_CONCURRENT_REQUESTS", 4)
