@@ -1,12 +1,10 @@
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from PIL import Image
 
 import config
-from models import Beat, Item
-from scripts.non_ai.generate_video_short.utils import beat_weights, segment_bounds
+from scripts.non_ai.generate_video_short.utils import segment_bounds
 
 
 def test_segment_bounds_splits_evenly():
@@ -37,11 +35,10 @@ def test_segment_bounds_rejects_zero_images():
 @pytest.mark.slow
 def test_renders_a_real_video(tmp_path, monkeypatch):
     """End-to-end render with tiny assets. Deselect with -m 'not slow'."""
-    from scripts.ai.generate_audios.utils import generate_audio_for_item  # noqa: F401
     from scripts.non_ai.generate_video_short.generate_video_short import (
-        generate_video_short,
+        generate_video_from_script,
     )
-    from utils.paths import audio_path, ensure_output_dirs, titled_image_path
+    from utils.paths import composed_image_path, ensure_output_dirs, section_audio_path
 
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(config, "VIDEO_WIDTH", 108)
@@ -49,10 +46,14 @@ def test_renders_a_real_video(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "VIDEO_FPS", 6)
     ensure_output_dirs()
 
-    items = [Item.from_prompts("Dodo", "A bird.", ("a", "b", "c"))]
-    for prompt_number in range(1, 4):
+    script = Script(
+        topic="dodo",
+        title="Dodo",
+        sections=(Section("HOOK", "A bird.", ("a", "b", "c")),),
+    )
+    for shot_number in range(1, 4):
         Image.new("RGB", (108, 192), (20, 40, 60)).save(
-            titled_image_path(1, prompt_number)
+            composed_image_path(1, shot_number)
         )
 
     # A one-second silent mp3 generated with ffmpeg (bundled with imageio-ffmpeg).
@@ -64,15 +65,16 @@ def test_renders_a_real_video(tmp_path, monkeypatch):
         [
             imageio_ffmpeg.get_ffmpeg_exe(), "-y", "-f", "lavfi",
             "-i", "anullsrc=r=44100:cl=mono", "-t", "1",
-            str(audio_path(1)),
+            str(section_audio_path(1)),
         ],
         check=True,
         capture_output=True,
     )
 
-    output = generate_video_short(items)
+    output, durations = generate_video_from_script(script)
     assert output.exists()
     assert output.stat().st_size > 0
+    assert len(durations) == 1
 
 
 def test_segment_bounds_accepts_equal_weights_like_a_count():
@@ -98,15 +100,6 @@ def test_segment_bounds_falls_back_to_equal_when_every_weight_is_zero():
 def test_segment_bounds_rejects_no_weights():
     with pytest.raises(ValueError):
         segment_bounds(5.0, [])
-
-
-def test_beat_weights_counts_narration_words():
-    item = Item("T", "d", (Beat("one two three", "p1"), Beat("four", "p2")))
-    assert beat_weights(item) == [3.0, 1.0]
-
-
-def test_beat_weights_are_all_zero_for_legacy_items():
-    assert beat_weights(Item.from_prompts("T", "d", ("a", "b"))) == [0.0, 0.0]
 
 
 from models import Script, Section

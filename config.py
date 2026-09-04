@@ -66,25 +66,20 @@ STORYBOARD_STYLE = _env_str(
 )
 
 # --- Pipeline shape ------------------------------------------------------
-# Frames per item. At SECONDS_PER_FRAME each, this also fixes how long an
-# item runs: six beats is roughly fifteen seconds.
-IMAGE_PROMPTS_PER_ITEM = _env_int("IMAGE_PROMPTS_PER_ITEM", 6)
-
 # How long a script should run, and how long one image holds. Image count is
 # a consequence of narration length, not a knob: see utils/timing.py.
 TARGET_VIDEO_SECONDS = _env_int("TARGET_VIDEO_SECONDS", 85)
 SECONDS_PER_IMAGE = 2.5
 
-# How long one frame should hold, and the model used to turn that into a
-# per-beat word budget. Both constants were solved from real TTS renders.
+# The model used to turn narration length into a per-shot word budget. Both
+# constants were solved from real TTS renders.
 #
 # The pause matters more than it looks: the voice leaves ~1.6s of silence
-# after every sentence, and one beat is one sentence, so that pause is a
-# floor under the frame duration no matter how few words a beat has. Frames
+# after every sentence, and one shot is one sentence, so that pause is a
+# floor under the frame duration no matter how few words a shot has. Frames
 # much shorter than ~3s are not reachable this way — shortening the sentence
 # only buys back speaking time, never the gap. Re-solve both if you change
 # TTS_VOICE or TTS_INSTRUCTIONS.
-SECONDS_PER_FRAME = 4.0
 NARRATION_WORDS_PER_SECOND = 3.15
 NARRATION_SENTENCE_PAUSE_SECONDS = 1.6
 MAX_CONCURRENT_REQUESTS = _env_int("MAX_CONCURRENT_REQUESTS", 4)
@@ -102,12 +97,7 @@ VIDEO_PRESET = _env_str("VIDEO_PRESET", "medium")
 INTRO_SILENCE_SECONDS = 0.2
 OUTRO_SILENCE_SECONDS = 0.5
 
-# --- Titled image rendering ---------------------------------------------
-TITLE_FONT_SIZE = 120
-TITLE_LINE_SPACING = 10
-TITLE_SIDE_MARGIN = 50
-TITLE_GAP_BELOW_IMAGE = 220
-TITLE_COLOR = "black"
+# --- Frame composition ---------------------------------------------------
 BACKGROUND_BLUR_RADIUS = 90
 # The background blur is applied at 1/N scale and upscaled back. For a radius
 # this large the result is visually identical and ~100x cheaper.

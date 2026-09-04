@@ -1,15 +1,8 @@
 import base64
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from models import Beat, Item
-from scripts.ai.generate_images.generate_images import (
-    anchor_jobs,
-    followup_jobs,
-    generate_images,
-)
 from scripts.ai.generate_images.utils import (
     generate_image,
     generate_image_from_reference,
@@ -48,23 +41,6 @@ class FakeImages:
 def fake_client(b64=None, error=None):
     images = FakeImages(b64=b64, error=error)
     return SimpleNamespace(images=images), images
-
-
-def two_items():
-    return [
-        Item(
-            "A",
-            "First.",
-            (Beat("n1", "a1"), Beat("n2", "a2"), Beat("n3", "a3")),
-            "STYLE A.",
-        ),
-        Item(
-            "B",
-            "Second.",
-            (Beat("n4", "b1"), Beat("n5", "b2"), Beat("n6", "b3")),
-            "STYLE B.",
-        ),
-    ]
 
 
 def test_generate_image_writes_the_decoded_bytes(tmp_path):
@@ -167,107 +143,6 @@ def test_generate_from_reference_leaves_no_partial_file_on_failure(tmp_path):
             "beat two", reference, destination, client=client
         )
     assert not destination.exists()
-
-
-def test_anchor_jobs_is_one_per_item():
-    client, _ = fake_client(b64=base64.b64encode(PNG_BYTES).decode())
-    jobs = anchor_jobs(two_items(), client=client)
-    assert [label for label, _ in jobs] == [
-        "image item 1 beat 1",
-        "image item 2 beat 1",
-    ]
-
-
-def test_followup_jobs_covers_every_later_beat():
-    client, _ = fake_client(b64=base64.b64encode(PNG_BYTES).decode())
-    labels = [label for label, _ in followup_jobs(two_items(), client=client)]
-    assert labels == [
-        "image item 1 beat 2",
-        "image item 1 beat 3",
-        "image item 2 beat 2",
-        "image item 2 beat 3",
-    ]
-
-
-def test_followup_jobs_is_empty_for_single_beat_items():
-    client, _ = fake_client(b64=base64.b64encode(PNG_BYTES).decode())
-    items = [Item("A", "First.", (Beat("n", "a1"),), "STYLE A.")]
-    assert followup_jobs(items, client=client) == []
-
-
-def test_jobs_are_not_executed_when_built():
-    client, images = fake_client(b64=base64.b64encode(PNG_BYTES).decode())
-    anchor_jobs(two_items(), client=client)
-    followup_jobs(two_items(), client=client)
-    assert images.calls == []
-    assert images.edits == []
-
-
-def test_anchor_prompts_carry_the_global_and_item_style(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("config.STORYBOARD_STYLE", "GLOBAL.")
-    client, images = fake_client(b64=base64.b64encode(PNG_BYTES).decode())
-    for _, run in anchor_jobs(two_items(), client=client):
-        run()
-    assert images.calls[0]["prompt"] == "GLOBAL. STYLE A. a1"
-    assert images.calls[1]["prompt"] == "GLOBAL. STYLE B. b1"
-
-
-def test_followup_prompts_carry_the_global_and_item_style(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr("config.STORYBOARD_STYLE", "GLOBAL.")
-    client, images = fake_client(b64=base64.b64encode(PNG_BYTES).decode())
-    for _, run in anchor_jobs(two_items(), client=client):
-        run()
-    for _, run in followup_jobs(two_items(), client=client):
-        run()
-    assert images.edits[0]["prompt"] == "GLOBAL. STYLE A. a2"
-    assert images.edits[-1]["prompt"] == "GLOBAL. STYLE B. b3"
-
-
-def test_followups_read_their_own_items_anchor(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    client, images = fake_client(b64=base64.b64encode(PNG_BYTES).decode())
-    for _, run in anchor_jobs(two_items(), client=client):
-        run()
-    label, run = followup_jobs(two_items(), client=client)[2]  # item 2 beat 2
-    run()
-    assert label == "image item 2 beat 2"
-    assert Path("outputs/image_output/item_02_prompt_02.png").exists()
-
-
-def test_generate_images_writes_every_frame(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    client, _ = fake_client(b64=base64.b64encode(PNG_BYTES).decode())
-    results = generate_images(two_items(), client=client)
-    assert all(r.ok for r in results)
-    assert len(results) == 6
-    assert Path("outputs/image_output/item_01_prompt_01.png").exists()
-    assert Path("outputs/image_output/item_02_prompt_03.png").exists()
-
-
-def test_a_failed_anchor_fails_its_followups_rather_than_vanishing(
-    tmp_path, monkeypatch
-):
-    monkeypatch.chdir(tmp_path)
-    client, images = fake_client(b64=base64.b64encode(PNG_BYTES).decode())
-    original = images.generate
-
-    def fail_item_one(**kwargs):
-        if kwargs["prompt"].endswith("a1"):
-            raise RuntimeError("content filtered")
-        return original(**kwargs)
-
-    images.generate = fail_item_one
-    results = generate_images(two_items(), client=client)
-
-    failed = {r.label: r for r in results if not r.ok}
-    assert set(failed) == {
-        "image item 1 beat 1",
-        "image item 1 beat 2",
-        "image item 1 beat 3",
-    }
-    assert isinstance(failed["image item 1 beat 2"].error, FileNotFoundError)
 
 
 from models import Script, Section

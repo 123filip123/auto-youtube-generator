@@ -2,28 +2,28 @@
 
 ## Overview
 
-This project automatically generates YouTube Shorts-style videos based on a topic you provide. It uses OpenAI APIs to write a narrated story for each item, draw the sequence of simple line drawings that illustrates it, and assemble them into a vertical video suitable for YouTube Shorts.
+This project automatically generates YouTube Shorts-style videos based on a topic you provide. It uses OpenAI APIs to write a narrated script broken into labelled sections, draw the sequence of simple line drawings that illustrates it, and assemble them into a vertical video suitable for YouTube Shorts.
 
 **Pipeline steps:**
 
-1. Generate a validated list of items via JSON-schema structured outputs. Each
-   item carries a style sheet naming its recurring figure and that figure's
-   colours, and a sequence of story beats pairing one short sentence of
-   narration with the drawing for it. Each beat is sized to be spoken in about
-   `SECONDS_PER_FRAME` seconds, so a new drawing lands every few seconds. Note
-   that the voice leaves roughly `NARRATION_SENTENCE_PAUSE_SECONDS` of silence
-   after each sentence, which puts a floor of about three seconds under how
-   short a frame can be.
-2. Generate every image and voiceover in two waves, capped at
-   `MAX_CONCURRENT_REQUESTS` concurrent API calls: first each item's opening
-   frame and its narration, then the remaining frames, each drawn as a
-   continuation of that opening frame so the figure stays recognisable.
-3. Verify every expected asset exists before continuing.
-4. Compose each image onto a blurred 1080x1920 backdrop with its title.
-5. Assemble the titled images and narration into a vertical video, holding
+1. Generate a validated script via JSON-schema structured outputs: a title, a
+   style sheet naming the recurring figure and its colours, and a sequence of
+   labelled sections, each pairing narration with the drawing prompts that
+   illustrate it. Section and shot counts fall out of narration length, not a
+   fixed knob — see `utils/timing.py`. Note that the voice leaves roughly
+   `NARRATION_SENTENCE_PAUSE_SECONDS` of silence after each sentence, which
+   puts a floor under how short a shot's hold time can be.
+2. Design the drawing prompts for every section's shots.
+3. Generate every section's narration and shots, capped at
+   `MAX_CONCURRENT_REQUESTS` concurrent API calls: shots within a section are
+   drawn as a chain, each continuing the one before so the figure stays
+   recognisable, while different sections run in parallel and narration rides
+   alongside. Verify every expected asset exists before continuing.
+4. Compose each shot onto a blurred 1080x1920 backdrop.
+5. Assemble the composed frames and narration into a vertical video, holding
    each frame still for as long as the narration it illustrates.
-6. Archive the run — list, audio, images, titled images and the finished video
-   — into `generated_data/<topic-slug>/`.
+6. Archive the run — script, audio, images, composed frames and the finished
+   video — into `generated_data/<topic-slug>/`.
 
 ---
 
@@ -85,12 +85,12 @@ variable of the same name (see `.env.example`). The ones worth knowing:
 |---|---|---|
 | `MAX_CONCURRENT_REQUESTS` | `4` | Parallel OpenAI calls. Lower it if you hit rate limits. |
 | `MAX_RETRIES` | `5` | Attempts per call before giving up. Rate limits and 5xx are retried with exponential backoff; content-policy rejections are not. |
-| `TEXT_MODEL` | `gpt-4.1-mini` | Generates the item list. Must support JSON schema structured outputs. |
+| `TEXT_MODEL` | `gpt-4.1-mini` | Generates the script. Must support JSON schema structured outputs. |
 | `TTS_MODEL` | `gpt-4o-mini-tts` | Narration. Must support the `instructions` parameter. |
 | `TTS_VOICE` | `ash` | Narration voice. |
 | `IMAGE_MODEL` | `gpt-image-1` | Image generation. |
 | `IMAGE_QUALITY` | `medium` | `low` is cheaper and faster; `high` is slower and costs more. |
-| `IMAGE_PROMPTS_PER_ITEM` | `6` | Frames per item. At `SECONDS_PER_FRAME` each this also sets how long an item runs — six beats is roughly twenty-four seconds. |
+| `TARGET_VIDEO_SECONDS` | `85` | How long the finished script should run. |
 | `STORYBOARD_STYLE` | flat-colour stick-figure line art | The drawing style every frame shares. |
 | `VIDEO_PRESET` | `medium` | x264 preset. `ultrafast` renders quicker at a larger file size. |
 
@@ -109,7 +109,7 @@ python main.py
 Or non-interactively:
 
 ```bash
-python main.py --topic "Top 5 Extinct Animals" --items 5
+python main.py --topic "Top 5 Extinct Animals" --seconds 60
 ```
 
 Output lands in `outputs/`, and a complete copy of the run is archived to
@@ -139,8 +139,8 @@ backend, so there is nothing else to configure.
 The UI can:
 
 - start a run and watch it stage by stage, with per-asset success and failure
-- pause after the item list is generated so you can edit titles, descriptions
-  and image prompts before any images or narration are paid for
+- pause after the script and its drawing prompts are generated so you can edit
+  the narration and drawings before any images or narration are paid for
 - override any of the tunables listed under [Configuration](#configuration) for
   a single run, without editing `.env`
 - browse every archived run in `generated_data/` with its images, narration and

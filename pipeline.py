@@ -1,38 +1,41 @@
 """Stage orchestration for the video generation pipeline.
 
 Each stage is callable on its own so a caller can stop between stages — the
-web UI pauses after the list stage to let a human edit the items. `run_pipeline`
-composes all five and is what the CLI uses.
+web UI pauses after the prompt stage to let a human edit the script and its
+drawings before any paid media is generated. `run_pipeline` composes all six
+and is what the CLI uses.
 """
 
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Callable, Sequence
+from typing import Callable
 
 import config
-from models import Item, save_items
-from scripts.ai.generate_audios.generate_audio import audio_jobs
-from scripts.ai.generate_images.generate_images import anchor_jobs, followup_jobs
-from scripts.ai.generate_list.generate_list import generate_list
-from scripts.non_ai.create_titled_images_short.create_titled_images_short import (
-    create_titled_images_for_items_short,
+from models import Script, save_script
+from scripts.ai.generate_audios.generate_audio import section_audio_jobs
+from scripts.ai.generate_images.generate_images import (
+    flatten_chain_results,
+    section_chain_jobs,
 )
+from scripts.ai.generate_prompts.generate_prompts import generate_prompts
+from scripts.ai.generate_script.generate_script import generate_script
+from scripts.non_ai.compose_frames.compose_frames import compose_frames_for_script
 from scripts.non_ai.generate_video_short.generate_video_short import (
-    generate_video_short,
+    generate_video_from_script,
 )
 from scripts.non_ai.save_to_generated_data.save_to_generated_data import (
-    save_to_generated_data,
+    save_script_to_generated_data,
 )
 from utils.openai_support import TaskResult, describe_failures, run_all
 from utils.paths import (
-    audio_path,
+    composed_image_path,
     ensure_output_dirs,
-    image_path,
-    list_items_path,
-    titled_image_path,
+    script_path,
+    section_audio_path,
+    section_image_path,
 )
 
-TOTAL_STAGES = 5
+TOTAL_STAGES = 6
 
 Log = Callable[[str], None]
 AssetCallback = Callable[[TaskResult], None]
@@ -47,32 +50,32 @@ def _unusable(path: Path) -> bool:
     return not path.exists() or path.stat().st_size == 0
 
 
-def missing_media(items: Sequence[Item]) -> list[Path]:
-    """Every expected image and audio file that is absent or empty."""
+def missing_media(script: Script) -> list[Path]:
+    """Every expected narration and shot image that is absent or empty."""
     missing: list[Path] = []
-    for item_number, item in enumerate(items, start=1):
-        candidate = audio_path(item_number)
+    for section_number, section in enumerate(script.sections, start=1):
+        candidate = section_audio_path(section_number)
         if _unusable(candidate):
             missing.append(candidate)
-        for beat_number in range(1, len(item.image_prompts) + 1):
-            candidate = image_path(item_number, beat_number)
+        for shot_number in range(1, len(section.prompts) + 1):
+            candidate = section_image_path(section_number, shot_number)
             if _unusable(candidate):
                 missing.append(candidate)
     return missing
 
 
-def missing_titled_images(items: Sequence[Item]) -> list[Path]:
-    """Every expected titled image that is absent or empty."""
+def missing_composed_frames(script: Script) -> list[Path]:
+    """Every expected composed frame that is absent or empty."""
     missing: list[Path] = []
-    for item_number, item in enumerate(items, start=1):
-        for beat_number in range(1, len(item.image_prompts) + 1):
-            candidate = titled_image_path(item_number, beat_number)
+    for section_number, section in enumerate(script.sections, start=1):
+        for shot_number in range(1, len(section.prompts) + 1):
+            candidate = composed_image_path(section_number, shot_number)
             if _unusable(candidate):
                 missing.append(candidate)
     return missing
 
 
-def _fail(stage: str, paths: Sequence[Path]) -> None:
+def _fail(stage: str, paths: list[Path]) -> None:
     listing = "\n".join(f"  - {path}" for path in paths)
     raise PipelineError(
         f"{stage} did not produce {len(paths)} required file(s):\n{listing}\n"
@@ -80,107 +83,167 @@ def _fail(stage: str, paths: Sequence[Path]) -> None:
     )
 
 
-def media_job_total(items: Sequence[Item]) -> int:
-    """One narration per item plus one image per prompt."""
-    return len(items) + sum(len(item.image_prompts) for item in items)
+def media_job_total(script: Script) -> int:
+    """One narration per section plus one image per shot."""
+    return len(script.sections) + sum(
+        len(section.prompts) for section in script.sections
+    )
 
 
-def titled_job_total(items: Sequence[Item]) -> int:
-    """One titled frame per generated image."""
-    return sum(len(item.image_prompts) for item in items)
+def compose_job_total(script: Script) -> int:
+    """One composed frame per generated shot."""
+    return sum(len(section.prompts) for section in script.sections)
 
 
-def generate_items_stage(
+def sections_without_shots(script: Script) -> list[str]:
+    """Labels of sections carrying narration but no drawings.
+
+    The AI never produces these — call 2 guarantees at least one prompt per
+    section — but the review gate lets a human delete every drawing from a
+    section, and nothing downstream notices: the chain jobs skip a promptless
+    section, `missing_media` iterates an empty range so it flags nothing, and
+    assembly then dies inside `segment_bounds` with a bare "Need at least one
+    image per section, got 0" that names neither the section nor the cause.
+    Catching it here fails before a cent is spent on narration.
+    """
+    return [
+        f"{position}. {section.label}"
+        for position, section in enumerate(script.sections, start=1)
+        if not section.prompts
+    ]
+
+
+def _asset_reporter(on_asset: AssetCallback | None) -> AssetCallback | None:
+    """Wrap a progress callback so chain jobs are not double-counted.
+
+    A section chain reports each shot through its own `on_shot` as the shot
+    lands. The wrapper result `run_all` produces when that job finishes
+    carries the same shots again, so it is dropped — unless the job failed
+    outright, in which case it is the only report there will be.
+    """
+    if on_asset is None:
+        return None
+
+    def report(result: TaskResult) -> None:
+        if result.ok and isinstance(result.value, list):
+            return
+        on_asset(result)
+
+    return report
+
+
+def generate_script_stage(
     topic: str,
-    num_items: int,
+    target_seconds: int | None = None,
     *,
     client=None,
     log: Log = print,
-) -> list[Item]:
-    """Stage 1: ask the model for the item list and save it to disk."""
+) -> Script:
+    """Stage 1: write the script and save it to disk."""
     ensure_output_dirs()
-    log(f"Generating {num_items} items for '{topic}'...")
-    items = generate_list(topic, num_items, client=client)
-    save_items(items, list_items_path())
-    for number, item in enumerate(items, start=1):
-        log(f"  {number}. {item.title}")
-    return items
+    target = config.TARGET_VIDEO_SECONDS if target_seconds is None else target_seconds
+    log(f"Writing a {target}-second script for '{topic}'...")
+    script = generate_script(topic, target, client=client)
+    save_script(script, script_path())
+    for section in script.sections:
+        log(f"  {section.label}: {section.narration}")
+    return script
+
+
+def generate_prompts_stage(
+    script: Script, *, client=None, log: Log = print
+) -> Script:
+    """Stage 2: design the style sheet and every drawing, then save."""
+    log("Designing the drawings...")
+    filled = generate_prompts(script, client=client)
+    save_script(filled, script_path())
+    total = compose_job_total(filled)
+    log(f"  {total} drawing(s) across {len(filled.sections)} section(s).")
+    return filled
 
 
 def generate_media_stage(
-    items: Sequence[Item],
+    script: Script,
     *,
     client=None,
     log: Log = print,
     on_asset: AssetCallback | None = None,
 ) -> None:
-    """Stage 2: generate every image and narration, then verify all of them."""
+    """Stage 3: narrate every section and draw every shot, then verify.
+
+    Audio jobs and section chains go into one pool together. There are no
+    waves any more: chaining is sequential inside a chain job, so ordering is
+    that job's problem rather than the scheduler's.
+    """
     ensure_output_dirs()
-    total = media_job_total(items)
+
+    empty = sections_without_shots(script)
+    if empty:
+        listing = "\n".join(f"  - {label}" for label in empty)
+        raise PipelineError(
+            f"{len(empty)} section(s) have narration but no drawings:\n{listing}\n"
+            f"Add at least one drawing to each, or remove the section."
+        )
+
+    total = media_job_total(script)
     log(
         f"Generating {total} media assets "
         f"({config.MAX_CONCURRENT_REQUESTS} at a time)..."
     )
-    # One shared pool across both waves, so every stage stays under one cap.
     with ThreadPoolExecutor(max_workers=config.MAX_CONCURRENT_REQUESTS) as executor:
-        # Wave one: every item's anchor frame, plus all the narration. Audio
-        # rides along here rather than idling while the anchors are drawn.
         results = run_all(
             executor,
-            anchor_jobs(items, client=client) + audio_jobs(items, client=client),
-            on_done=on_asset,
-        )
-        # Wave two: the follow-up frames, each continuing an anchor that now
-        # exists on disk. Built after wave one so a failed anchor is visible.
-        results += run_all(
-            executor, followup_jobs(items, client=client), on_done=on_asset
+            section_chain_jobs(script, client=client, on_shot=on_asset)
+            + section_audio_jobs(script, client=client),
+            on_done=_asset_reporter(on_asset),
         )
 
-    failures = describe_failures(results)
+    failures = describe_failures(flatten_chain_results(results))
     if failures:
         log(failures)
 
-    missing = missing_media(items)
+    missing = missing_media(script)
     if missing:
         _fail("Media generation", missing)
 
 
-def render_titled_images_stage(
-    items: Sequence[Item],
+def compose_stage(
+    script: Script,
     *,
     log: Log = print,
     on_asset: AssetCallback | None = None,
 ) -> None:
-    """Stage 3: compose each image onto a blurred backdrop with its title."""
-    log("Rendering titled images...")
-    results = create_titled_images_for_items_short(items, on_done=on_asset)
+    """Stage 4: compose each shot onto its blurred backdrop."""
+    log("Composing frames...")
+    results = compose_frames_for_script(script, on_done=on_asset)
 
     failures = describe_failures(results)
     if failures:
         log(failures)
 
-    missing = missing_titled_images(items)
+    missing = missing_composed_frames(script)
     if missing:
-        _fail("Titled image rendering", missing)
+        _fail("Frame composition", missing)
 
 
-def render_video_stage(items: Sequence[Item], *, log: Log = print) -> Path:
-    """Stage 4: assemble the titled images and narration into the final video."""
+def render_video_stage(
+    script: Script, *, log: Log = print
+) -> tuple[Path, list[float]]:
+    """Stage 5: assemble the frames and narration into the final video."""
     log("Assembling video...")
-    return generate_video_short(items)
+    return generate_video_from_script(script)
 
 
-def archive_stage(topic: str, items: Sequence[Item], *, log: Log = print) -> Path:
-    """Stage 5: copy the whole run into `generated_data/<topic-slug>/`."""
+def archive_stage(
+    script: Script, durations: list[float], *, log: Log = print
+) -> Path:
+    """Stage 6: copy the whole run into `generated_data/<topic-slug>/`."""
     log("Archiving...")
-    return save_to_generated_data(topic, items)
+    return save_script_to_generated_data(script, durations)
 
 
 def _banner(step: int) -> Log:
-    """A logger that stamps a `[n/5]` banner onto the stage's first line only.
-
-    Keeps the CLI's output byte-identical now that stages own their headlines.
-    """
+    """A logger that stamps a `[n/6]` banner onto the stage's first line only."""
     pending = [True]
 
     def log(message: str) -> None:
@@ -193,14 +256,19 @@ def _banner(step: int) -> Log:
     return log
 
 
-def run_pipeline(topic: str, num_items: int, *, client=None) -> Path:
+def run_pipeline(
+    topic: str, target_seconds: int | None = None, *, client=None
+) -> Path:
     """Run every stage end to end and return the path to the finished video."""
     ensure_output_dirs()
 
-    items = generate_items_stage(topic, num_items, client=client, log=_banner(1))
-    generate_media_stage(items, client=client, log=_banner(2))
-    render_titled_images_stage(items, log=_banner(3))
-    video = render_video_stage(items, log=_banner(4))
-    archive_stage(topic, items, log=_banner(5))
+    script = generate_script_stage(
+        topic, target_seconds, client=client, log=_banner(1)
+    )
+    script = generate_prompts_stage(script, client=client, log=_banner(2))
+    generate_media_stage(script, client=client, log=_banner(3))
+    compose_stage(script, log=_banner(4))
+    video, durations = render_video_stage(script, log=_banner(5))
+    archive_stage(script, durations, log=_banner(6))
 
     return video

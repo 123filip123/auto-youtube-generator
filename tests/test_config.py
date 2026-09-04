@@ -13,8 +13,8 @@ def reload_config(monkeypatch, **env):
 
 def test_defaults_are_sane():
     module = importlib.reload(config)
-    assert module.IMAGE_PROMPTS_PER_ITEM == 6
-    assert module.SECONDS_PER_FRAME == pytest.approx(4.0)
+    assert module.TARGET_VIDEO_SECONDS == 85
+    assert module.SECONDS_PER_IMAGE == pytest.approx(2.5)
     assert module.NARRATION_WORDS_PER_SECOND == pytest.approx(3.15)
     assert module.NARRATION_SENTENCE_PAUSE_SECONDS == pytest.approx(1.6)
     assert module.MAX_CONCURRENT_REQUESTS == 4

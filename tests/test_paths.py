@@ -5,30 +5,6 @@ import pytest
 from utils import paths
 
 
-def test_image_path_is_zero_padded():
-    assert paths.image_path(1, 2) == Path("outputs/image_output/item_01_prompt_02.png")
-
-
-def test_image_path_handles_double_digits():
-    assert paths.image_path(12, 10) == Path("outputs/image_output/item_12_prompt_10.png")
-
-
-def test_audio_path_is_zero_padded():
-    assert paths.audio_path(3) == Path("outputs/audio_output/item_03.mp3")
-
-
-def test_titled_image_path_has_short_suffix():
-    assert paths.titled_image_path(5, 1) == Path(
-        "outputs/titled_image_output/item_05_prompt_01_short.png"
-    )
-
-
-def test_list_items_path():
-    assert paths.list_items_path() == Path(
-        "outputs/json_output/list_items_with_prompts.json"
-    )
-
-
 def test_video_output_path():
     assert paths.video_output_path() == Path("outputs/video_output/final_video_short.mp4")
 

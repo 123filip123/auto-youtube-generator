@@ -1,4 +1,4 @@
-"""Assemble titled images and narration into per-item video clips."""
+"""Assemble composed frames and narration into per-section video clips."""
 
 from pathlib import Path
 from typing import Sequence
@@ -14,24 +14,8 @@ from moviepy.editor import (
 from PIL import Image
 
 import config
-from models import Item, Section
-from utils.paths import (
-    audio_path,
-    composed_image_path,
-    section_audio_path,
-    titled_image_path,
-)
-
-
-def beat_weights(item: Item) -> list[float]:
-    """How long each beat should hold, as the word count of its narration.
-
-    TTS pace is close enough to uniform that word count is a good proxy for
-    elapsed time, and it costs nothing. Items with no narration — every
-    archive written before storyboards — weigh zero and fall back to an
-    equal split.
-    """
-    return [float(len(beat.narration.split())) for beat in item.beats]
+from models import Section
+from utils.paths import composed_image_path, section_audio_path
 
 
 def segment_bounds(
@@ -81,40 +65,6 @@ def build_image_clip(image_path: Path, segment_duration: float, start_time: floa
 
     clip = ImageClip(frame, duration=segment_duration)
     return clip.set_position("center").set_start(start_time)
-
-
-def build_item_audio(item_number: int) -> tuple[CompositeAudioClip, float]:
-    """Narration padded with leading and trailing silence.
-
-    Returns the clip and its total duration, so callers do not need to reopen
-    the file just to measure it. The previous implementation opened the same
-    mp3 four times per item.
-    """
-    voice = AudioFileClip(str(audio_path(item_number)))
-    total_duration = (
-        config.INTRO_SILENCE_SECONDS + voice.duration + config.OUTRO_SILENCE_SECONDS
-    )
-    padded = CompositeAudioClip(
-        [voice.set_start(config.INTRO_SILENCE_SECONDS)]
-    ).set_duration(total_duration)
-    return padded, total_duration
-
-
-def build_item_clip(item_number: int, item: Item):
-    """One item: its story frames in sequence, over its narration."""
-    audio, total_duration = build_item_audio(item_number)
-
-    layers = [build_background_clip(total_duration)]
-    for beat_number, (start, duration) in enumerate(
-        segment_bounds(total_duration, beat_weights(item)), start=1
-    ):
-        layers.append(
-            build_image_clip(
-                titled_image_path(item_number, beat_number), duration, start
-            )
-        )
-
-    return CompositeVideoClip(layers).set_duration(total_duration).set_audio(audio)
 
 
 def build_section_audio(
