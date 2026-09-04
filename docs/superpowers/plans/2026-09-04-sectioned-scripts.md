@@ -4387,12 +4387,17 @@ After Task 17, confirm the whole migration landed:
 
 ```bash
 venv/bin/pytest
-cd frontend && npx vitest run && npx tsc --noEmit
+cd frontend && npx vitest run && npx tsc -b
 grep -rn "num_items\|IMAGE_PROMPTS_PER_ITEM\|ItemPayload\|titled_image" \
   --exclude-dir=venv --exclude-dir=node_modules --exclude-dir=.git --exclude-dir=docs .
 ```
 
-The grep must return nothing. Then run one real generation end to end and watch for the two things unit tests cannot catch:
+The grep must return nothing.
+
+**Use `npx tsc -b`, not `npx tsc --noEmit`.** The frontend's root
+`tsconfig.json` sets `files: []` and delegates to project references, so
+`--noEmit` typechecks nothing and exits 0 no matter how broken the code is.
+Only the build-mode invocation walks the referenced projects. Then run one real generation end to end and watch for the two things unit tests cannot catch:
 
 ```bash
 venv/bin/python main.py --topic "how dogs evolved from wolves" --seconds 85
