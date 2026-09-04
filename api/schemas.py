@@ -116,6 +116,7 @@ class ArchiveSummaryPayload(BaseModel):
     image_count: int
     audio_count: int
     has_video: bool
+    legacy: bool = False
     modified_at: str
 
 
@@ -123,6 +124,8 @@ class ArchiveSectionPayload(BaseModel):
     label: str
     narration: str
     prompts: list[str]
+    start: float = 0.0
+    end: float = 0.0
     image_urls: list[str]
     composed_image_urls: list[str]
     audio_url: str | None = None
@@ -134,6 +137,7 @@ class ArchiveDetailPayload(BaseModel):
     title: str
     style: str = ""
     video_url: str | None = None
+    legacy: bool = False
     sections: list[ArchiveSectionPayload]
 
 

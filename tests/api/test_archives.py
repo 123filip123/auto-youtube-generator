@@ -1,8 +1,11 @@
+import json
+
 import pytest
 
+from api import archives
 from api.archives import ArchiveNotFoundError, archive_detail, list_archives
 from models import Script, Section, save_script
-from utils.paths import ARCHIVED_SCRIPT_FILENAME
+from utils.paths import ARCHIVED_SCRIPT_FILENAME, GENERATED_DATA_ROOT, VIDEO_FILENAME
 
 
 def _script():
@@ -11,7 +14,9 @@ def _script():
         title="Two Extinct Birds",
         style="A tall flightless bird.",
         sections=(
-            Section("HOOK", "A flightless bird. It is extinct.", ("a", "b")),
+            Section(
+                "HOOK", "A flightless bird. It is extinct.", ("a", "b"), 0.0, 5.0
+            ),
         ),
     )
 
@@ -117,3 +122,71 @@ def test_archive_detail_exposes_prompts(tmp_path, monkeypatch):
     assert detail["style"] == "A tall bird."
     assert detail["sections"][0]["narration"] == "A very tall bird."
     assert detail["sections"][0]["prompts"] == ["the bird alone"]
+
+
+def write_legacy_archive(root, slug="old_run"):
+    """An archive in the pre-migration shape: list_items.json, item_* filenames."""
+    folder = root / GENERATED_DATA_ROOT / slug
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "list_items.json").write_text(
+        json.dumps([{"title": "Dodo", "description": "A bird.", "image_prompts": ["p"]}])
+    )
+    (folder / "images").mkdir(exist_ok=True)
+    (folder / "images" / "item_01_prompt_01.png").write_bytes(b"png")
+    (folder / VIDEO_FILENAME).write_bytes(b"mp4")
+    return folder
+
+
+def test_a_legacy_archive_is_listed_and_flagged(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    write_legacy_archive(tmp_path)
+    summary = archives.list_archives()[0]
+    assert summary["legacy"] is True
+    assert summary["section_count"] == 0
+    assert summary["image_count"] == 1
+    assert summary["has_video"] is True
+
+
+def test_a_legacy_archive_detail_keeps_its_video_and_does_not_raise(tmp_path, monkeypatch):
+    """The whole point: an old run must not vanish from the browser."""
+    monkeypatch.chdir(tmp_path)
+    write_legacy_archive(tmp_path)
+    detail = archives.archive_detail("old_run")
+    assert detail["legacy"] is True
+    assert detail["sections"] == []
+    assert detail["video_url"].endswith(VIDEO_FILENAME)
+
+
+def test_a_current_archive_is_not_flagged_legacy(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    build_archive(tmp_path, "wolves")
+    assert archives.list_archives()[0]["legacy"] is False
+    assert archives.archive_detail("wolves")["legacy"] is False
+
+
+def test_an_archive_with_unreadable_script_is_treated_as_legacy(tmp_path, monkeypatch):
+    """Corrupt JSON must degrade to legacy, not 404 the whole archive."""
+    monkeypatch.chdir(tmp_path)
+    folder = build_archive(tmp_path, "wolves")
+    (folder / ARCHIVED_SCRIPT_FILENAME).write_text("{ not json")
+    assert archives.archive_detail("wolves")["legacy"] is True
+
+
+def test_an_unknown_slug_still_raises(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(archives.ArchiveNotFoundError):
+        archives.archive_detail("nope")
+
+
+def test_a_traversal_slug_is_still_rejected(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(archives.ArchiveNotFoundError):
+        archives.archive_detail("../etc")
+
+
+def test_sections_carry_their_timings(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    build_archive(tmp_path, "wolves")
+    section = archives.archive_detail("wolves")["sections"][0]
+    assert section["start"] == 0.0
+    assert section["end"] == 5.0

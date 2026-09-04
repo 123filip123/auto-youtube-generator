@@ -99,6 +99,7 @@ export interface ArchiveSummary {
   image_count: number;
   audio_count: number;
   has_video: boolean;
+  legacy: boolean;
   modified_at: string;
 }
 
@@ -106,6 +107,8 @@ export interface ArchiveSection {
   label: string;
   narration: string;
   prompts: string[];
+  start: number;
+  end: number;
   image_urls: string[];
   composed_image_urls: string[];
   audio_url: string | null;
@@ -117,5 +120,6 @@ export interface ArchiveDetail {
   title: string;
   style: string;
   video_url: string | null;
+  legacy: boolean;
   sections: ArchiveSection[];
 }

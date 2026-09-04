@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from models import InvalidScriptError, load_script
+from models import InvalidScriptError, Script, load_script
 from utils.paths import ARCHIVED_SCRIPT_FILENAME, GENERATED_DATA_ROOT, VIDEO_FILENAME
 
 MEDIA_PREFIX = "/media/generated_data"
@@ -58,6 +58,22 @@ def _archive_dir(slug: str) -> Path:
     return folder
 
 
+def _read_script(folder: Path) -> Script | None:
+    """The archived script, or None if this is a pre-migration archive.
+
+    Returning None rather than raising is the whole point: an archive written
+    before sectioned scripts, or one whose script.json is corrupt, must still
+    be browsable for its video and media rather than 404ing.
+    """
+    listing = folder / ARCHIVED_SCRIPT_FILENAME
+    if not listing.is_file():
+        return None
+    try:
+        return load_script(listing)
+    except (InvalidScriptError, OSError):
+        return None
+
+
 def list_archives() -> list[dict[str, Any]]:
     """Summarise every archive folder, newest first."""
     if not GENERATED_DATA_ROOT.is_dir():
@@ -67,20 +83,15 @@ def list_archives() -> list[dict[str, Any]]:
     for folder in GENERATED_DATA_ROOT.iterdir():
         if not folder.is_dir() or not _VALID_SLUG.match(folder.name):
             continue
-        listing = folder / ARCHIVED_SCRIPT_FILENAME
-        section_count = 0
-        if listing.is_file():
-            try:
-                section_count = len(load_script(listing).sections)
-            except (InvalidScriptError, OSError):
-                section_count = 0
+        script = _read_script(folder)
         summaries.append(
             {
                 "slug": folder.name,
-                "section_count": section_count,
+                "section_count": len(script.sections) if script else 0,
                 "image_count": _count_files(folder / "images", ".png"),
                 "audio_count": _count_files(folder / "audio", ".mp3"),
                 "has_video": (folder / VIDEO_FILENAME).is_file(),
+                "legacy": script is None,
                 "modified_at": _modified_at(folder),
             }
         )
@@ -92,14 +103,21 @@ def list_archives() -> list[dict[str, Any]]:
 def archive_detail(slug: str) -> dict[str, Any]:
     """One archive's sections with a media URL for every file that exists."""
     folder = _archive_dir(slug)
+    script = _read_script(folder)
+    video = folder / VIDEO_FILENAME
+    video_url = _url(slug, VIDEO_FILENAME) if video.is_file() else None
 
-    listing = folder / ARCHIVED_SCRIPT_FILENAME
-    if not listing.is_file():
-        raise ArchiveNotFoundError(slug)
-    try:
-        script = load_script(listing)
-    except (InvalidScriptError, OSError) as exc:
-        raise ArchiveNotFoundError(slug) from exc
+    if script is None:
+        # A pre-migration archive: everything we can still honestly say about it.
+        return {
+            "slug": slug,
+            "topic": slug.replace("_", " "),
+            "title": slug.replace("_", " "),
+            "style": "",
+            "video_url": video_url,
+            "legacy": True,
+            "sections": [],
+        }
 
     payload_sections: list[dict[str, Any]] = []
     for section_number, section in enumerate(script.sections, start=1):
@@ -110,6 +128,8 @@ def archive_detail(slug: str) -> dict[str, Any]:
                 "label": section.label,
                 "narration": section.narration,
                 "prompts": list(section.prompts),
+                "start": section.start,
+                "end": section.end,
                 "image_urls": [
                     _url(slug, "images", name)
                     for name in _names_with_prefix(
@@ -128,12 +148,12 @@ def archive_detail(slug: str) -> dict[str, Any]:
             }
         )
 
-    video = folder / VIDEO_FILENAME
     return {
         "slug": slug,
         "topic": script.topic,
         "title": script.title,
         "style": script.style,
-        "video_url": _url(slug, VIDEO_FILENAME) if video.is_file() else None,
+        "video_url": video_url,
+        "legacy": False,
         "sections": payload_sections,
     }
