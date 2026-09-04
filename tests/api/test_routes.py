@@ -161,6 +161,39 @@ def test_approve_script_rejects_a_script_with_no_sections(client, store):
     assert response.status_code == 400
 
 
+def test_approve_script_discards_client_supplied_timings(client, store):
+    """`start`/`end` are output-only: a client can send anything, but the
+
+    server re-derives them from the narration rather than storing them.
+    """
+    created = client.post(
+        "/api/runs",
+        json={"topic": "wolves", "target_seconds": 85, "review_script": True},
+    ).json()
+    store.wait_for_status(created["id"], "awaiting_review")
+    script = client.get(f"/api/runs/{created['id']}").json()["script"]
+
+    for section in script["sections"]:
+        section["start"] = 999.0
+        section["end"] = 999.0
+
+    approved = client.post(
+        f"/api/runs/{created['id']}/script", json={"script": script}
+    ).json()["script"]
+    for section in approved["sections"]:
+        assert section["start"] != 999.0
+        assert section["end"] != 999.0
+
+    # And the re-derived timings are what `run_detail` keeps reporting too,
+    # not just what the approve response happened to echo back.
+    detail_sections = client.get(f"/api/runs/{created['id']}").json()["script"][
+        "sections"
+    ]
+    for section in detail_sections:
+        assert section["start"] != 999.0
+        assert section["end"] != 999.0
+
+
 def test_editing_narration_does_not_recount_prompts(client, store):
     """The review gate never regenerates prompts; the shot list is the user's."""
     created = client.post(

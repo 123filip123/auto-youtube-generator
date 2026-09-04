@@ -71,9 +71,10 @@ def _silent_mp3() -> bytes:
 class FakeOpenAI:
     """Answers the calls the pipeline makes, with usable payloads.
 
-    `chat.completions.create` answers the script (call 1) then the prompts
-    (every call after) — a run only ever makes exactly those two chat calls,
-    one per script/prompts stage.
+    `chat.completions.create` answers the script then the prompts, in that
+    order, for every run: each run makes exactly two chat calls (one per
+    script/prompts stage), so odd calls are the script and even calls are the
+    prompts regardless of how many runs share this client.
     """
 
     def __init__(self, audio: bytes) -> None:
@@ -88,7 +89,7 @@ class FakeOpenAI:
 
     def _chat(self, **_kwargs):
         self._chat_calls += 1
-        content = SCRIPT_JSON if self._chat_calls == 1 else PROMPTS_JSON
+        content = SCRIPT_JSON if self._chat_calls % 2 == 1 else PROMPTS_JSON
         message = SimpleNamespace(content=content)
         return SimpleNamespace(choices=[SimpleNamespace(message=message)])
 
@@ -205,3 +206,14 @@ def test_a_whole_run_through_the_api(tmp_path, monkeypatch):
 
         # 6. The override was reverted once the run finished.
         assert config.IMAGE_QUALITY == "medium"
+
+        # 7. A second run is allowed now that the first is terminal — the
+        # only end-to-end proof that the single-run lock actually releases
+        # after a genuine full pipeline run, not just a stubbed one.
+        assert (
+            http.post(
+                "/api/runs", json={"topic": "Foxes", "target_seconds": 15}
+            ).status_code
+            == 201
+        )
+        store.wait_for_idle(timeout=180)

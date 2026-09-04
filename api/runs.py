@@ -18,7 +18,7 @@ from typing import Any
 
 import pipeline
 from api.config_view import apply_overrides
-from models import Script, save_script
+from models import Script, save_script, with_estimated_timings
 from utils.openai_support import TaskResult
 from utils.paths import script_path, slugify
 
@@ -159,7 +159,16 @@ class RunStore:
         return run
 
     def approve_script(self, run_id: str, script: Script) -> Run:
-        """Replace the run's script with the edited one and let it continue."""
+        """Replace the run's script with the edited one and let it continue.
+
+        `start`/`end` are output-only on the wire, but `parse_script` still
+        accepts whatever a client sends (it is shared with the archive-load
+        path, which must preserve measured timings read from disk). Re-derive
+        them here from the — possibly edited — narration so a client-supplied
+        timing never survives review, and an edited narration is reflected in
+        its own timing rather than a stale estimate for the old text.
+        """
+        script = with_estimated_timings(script)
         with self._lock:
             run = self.get(run_id)
             if run.status != STATUS_AWAITING_REVIEW:
