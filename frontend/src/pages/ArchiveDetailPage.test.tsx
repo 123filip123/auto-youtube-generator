@@ -24,19 +24,23 @@ function renderPage() {
 }
 
 describe("ArchiveDetailPage", () => {
-  it("renders the video, images and audio", async () => {
+  it("renders the video, title, style and section media", async () => {
     mockJson({
       slug: "birds",
+      topic: "extinct birds",
+      title: "Birds That Vanished",
+      style: "A round flightless bird.",
       video_url: "/media/generated_data/birds/final_video_short.mp4",
-      items: [
+      legacy: false,
+      sections: [
         {
-          title: "Dodo",
-          description: "A bird.",
-          style: "A round flightless bird.",
-          beats: [{ narration: "A bird.", prompt: "a" }],
-          image_prompts: ["a"],
+          label: "Dodo",
+          narration: "A bird.",
+          prompts: ["a"],
+          start: 0,
+          end: 5,
           image_urls: ["/media/generated_data/birds/images/item_01_prompt_01.png"],
-          titled_image_urls: [],
+          composed_image_urls: [],
           audio_url: "/media/generated_data/birds/audio/item_01.mp3",
         },
       ],
@@ -44,23 +48,26 @@ describe("ArchiveDetailPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Dodo")).toBeInTheDocument();
+    expect(await screen.findByText("Birds That Vanished")).toBeInTheDocument();
+    expect(screen.getByText("A round flightless bird.")).toBeInTheDocument();
+    expect(screen.getByText("Dodo")).toBeInTheDocument();
+    expect(screen.getByText("A bird.")).toBeInTheDocument();
     expect(screen.getByTestId("archive-video")).toHaveAttribute(
       "src",
       "/media/generated_data/birds/final_video_short.mp4",
     );
-    expect(screen.getByAltText("Dodo image 1")).toHaveAttribute(
-      "src",
-      "/media/generated_data/birds/images/item_01_prompt_01.png",
-    );
-    expect(screen.getByTestId("audio-1")).toHaveAttribute(
-      "src",
-      "/media/generated_data/birds/audio/item_01.mp3",
-    );
   });
 
   it("copes with an archive that has no video", async () => {
-    mockJson({ slug: "old", video_url: null, items: [] });
+    mockJson({
+      slug: "old",
+      topic: "old",
+      title: "old",
+      style: "",
+      video_url: null,
+      legacy: false,
+      sections: [],
+    });
     renderPage();
     expect(await screen.findByText(/no video/i)).toBeInTheDocument();
   });
@@ -71,53 +78,43 @@ describe("ArchiveDetailPage", () => {
     expect(await screen.findByText(/no archive birds/i)).toBeInTheDocument();
   });
 
-  it("pairs each beat's narration with its drawing prompt", async () => {
+  it("groups images under their section label", async () => {
     mockJson({
-      slug: "birds",
-      video_url: null,
-      items: [
+      slug: "wolves",
+      topic: "wolves",
+      title: "Wolves Domesticated Themselves",
+      style: "A grey-blue wolf.",
+      video_url: "/media/generated_data/wolves/final_video_short.mp4",
+      legacy: false,
+      sections: [
         {
-          title: "Moa",
-          description: "A very tall bird. It could not fly.",
-          style: "A tall bird.",
-          beats: [
-            { narration: "A very tall bird.", prompt: "the bird alone" },
-            { narration: "It could not fly.", prompt: "the same bird, wings out" },
-          ],
-          image_prompts: ["the bird alone", "the same bird, wings out"],
-          image_urls: [],
-          titled_image_urls: [],
-          audio_url: null,
+          label: "HOOK",
+          narration: "One line.",
+          start: 0,
+          end: 5,
+          prompts: ["p1"],
+          image_urls: ["/i1.png"],
+          composed_image_urls: [],
+          audio_url: "/a.mp3",
         },
       ],
     });
-
     renderPage();
-
-    expect(await screen.findByText("A very tall bird.")).toBeInTheDocument();
-    expect(screen.getByText("the same bird, wings out")).toBeInTheDocument();
+    expect(await screen.findByText("HOOK")).toBeInTheDocument();
+    expect(screen.getByText("One line.")).toBeInTheDocument();
   });
 
-  it("falls back to the flat prompt list for pre-storyboard archives", async () => {
+  it("explains a legacy archive instead of rendering empty sections", async () => {
     mockJson({
-      slug: "birds",
-      video_url: null,
-      items: [
-        {
-          title: "Dodo",
-          description: "A bird.",
-          style: "",
-          beats: [],
-          image_prompts: ["a dodo", "a dodo on a skateboard"],
-          image_urls: [],
-          titled_image_urls: [],
-          audio_url: null,
-        },
-      ],
+      slug: "old_run",
+      topic: "old",
+      title: "old run",
+      style: "",
+      video_url: "/v.mp4",
+      legacy: true,
+      sections: [],
     });
-
     renderPage();
-
-    expect(await screen.findByText("a dodo on a skateboard")).toBeInTheDocument();
+    expect(await screen.findByText(/older format/i)).toBeInTheDocument();
   });
 });

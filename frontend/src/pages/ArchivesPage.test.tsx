@@ -23,10 +23,11 @@ describe("ArchivesPage", () => {
     mockJson([
       {
         slug: "top_5_extinct_animals",
-        item_count: 5,
+        section_count: 5,
         image_count: 15,
         audio_count: 5,
         has_video: true,
+        legacy: false,
         modified_at: "2026-08-18T10:00:00+00:00",
       },
     ]);
@@ -50,5 +51,25 @@ describe("ArchivesPage", () => {
       </MemoryRouter>,
     );
     expect(await screen.findByText(/no archives yet/i)).toBeInTheDocument();
+  });
+
+  it("marks a legacy archive", async () => {
+    mockJson([
+      {
+        slug: "old_run",
+        section_count: 0,
+        image_count: 3,
+        audio_count: 0,
+        has_video: true,
+        legacy: true,
+        modified_at: "2026-01-01T00:00:00+00:00",
+      },
+    ]);
+    render(
+      <MemoryRouter>
+        <ArchivesPage />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByText(/legacy/i)).toBeInTheDocument();
   });
 });

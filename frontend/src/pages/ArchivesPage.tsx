@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -40,7 +41,7 @@ export default function ArchivesPage() {
       <TableHeader>
         <TableRow>
           <TableHead>Topic</TableHead>
-          <TableHead>Items</TableHead>
+          <TableHead>Sections</TableHead>
           <TableHead>Images</TableHead>
           <TableHead>Audio</TableHead>
           <TableHead>Video</TableHead>
@@ -53,8 +54,13 @@ export default function ArchivesPage() {
               <Link to={`/archives/${archive.slug}`} className="underline">
                 {archive.slug}
               </Link>
+              {archive.legacy && (
+                <Badge variant="secondary" className="ml-2">
+                  Legacy
+                </Badge>
+              )}
             </TableCell>
-            <TableCell>{archive.item_count}</TableCell>
+            <TableCell>{archive.section_count}</TableCell>
             <TableCell>{archive.image_count}</TableCell>
             <TableCell>{archive.audio_count}</TableCell>
             <TableCell>{archive.has_video ? "yes" : "no"}</TableCell>

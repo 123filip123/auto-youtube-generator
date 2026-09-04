@@ -32,7 +32,12 @@ export default function ArchiveDetailPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-semibold">{archive.slug}</h1>
+      <div>
+        <h1 className="text-xl font-semibold">{archive.title}</h1>
+        {archive.style && (
+          <p className="text-sm text-muted-foreground">{archive.style}</p>
+        )}
+      </div>
 
       {archive.video_url ? (
         <video
@@ -49,61 +54,33 @@ export default function ArchiveDetailPage() {
 
       <Separator />
 
-      {archive.items.map((item, index) => (
-        <Card key={`${item.title}-${index}`}>
-          <CardHeader>
-            <CardTitle className="text-base">{item.title}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-sm">{item.description}</p>
-
-            {item.audio_url && (
-              <audio
-                data-testid={`audio-${index + 1}`}
-                src={item.audio_url}
-                controls
-                className="w-full"
-              />
-            )}
-
-            <div className="flex flex-wrap gap-2">
-              {item.image_urls.map((url, imageIndex) => (
-                <img
-                  key={url}
-                  src={url}
-                  alt={`${item.title} image ${imageIndex + 1}`}
-                  className="h-32 w-32 rounded border object-cover"
-                />
-              ))}
-              {item.titled_image_urls.map((url, imageIndex) => (
-                <img
-                  key={url}
-                  src={url}
-                  alt={`${item.title} titled image ${imageIndex + 1}`}
-                  className="h-32 w-auto rounded border object-contain"
-                />
-              ))}
-            </div>
-
-            {item.beats.length > 0 ? (
-              <ol className="space-y-1 text-xs text-muted-foreground">
-                {item.beats.map((beat, beatIndex) => (
-                  <li key={beatIndex}>
-                    <span className="text-foreground">{beat.narration}</span>{" "}
-                    {beat.prompt}
-                  </li>
+      {archive.legacy ? (
+        <Alert>
+          <AlertDescription>
+            This run used an older format, so its script is not available. The
+            video and its media files are still here.
+          </AlertDescription>
+        </Alert>
+      ) : (
+        archive.sections.map((section, index) => (
+          <Card key={index}>
+            <CardHeader>
+              <CardTitle className="text-base">{section.label}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm">{section.narration}</p>
+              {section.audio_url && (
+                <audio controls src={section.audio_url} className="w-full" />
+              )}
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {section.image_urls.map((url) => (
+                  <img key={url} src={url} alt="" className="w-full rounded" />
                 ))}
-              </ol>
-            ) : (
-              <ul className="list-disc pl-5 text-xs text-muted-foreground">
-                {item.image_prompts.map((prompt, promptIndex) => (
-                  <li key={promptIndex}>{prompt}</li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      ))}
+              </div>
+            </CardContent>
+          </Card>
+        ))
+      )}
     </div>
   );
 }
