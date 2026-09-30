@@ -8,6 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+import config
 from api.config_view import OVERRIDABLE, effective_config
 from api.runs import Run
 from models import Item
@@ -45,6 +46,7 @@ class RunSummaryPayload(BaseModel):
 class RunDetailPayload(RunSummaryPayload):
     review_items: bool
     overrides: dict[str, Any]
+    production_models: bool
     items: list[ItemPayload]
     assets: list[AssetStatusPayload]
     asset_total: int
@@ -59,6 +61,7 @@ class CreateRunRequest(BaseModel):
     num_items: int = Field(ge=1, le=50)
     review_items: bool = False
     overrides: dict[str, Any] = Field(default_factory=dict)
+    production_models: bool = False
 
     @field_validator("topic")
     @classmethod
@@ -83,6 +86,7 @@ class ConfigFieldPayload(BaseModel):
 class ConfigPayload(BaseModel):
     values: dict[str, Any]
     overridable: list[ConfigFieldPayload]
+    production_image_settings: dict[str, str]
 
 
 class ArchiveSummaryPayload(BaseModel):
@@ -121,6 +125,7 @@ def config_payload() -> ConfigPayload:
             )
             for field in OVERRIDABLE
         ],
+        production_image_settings=dict(config.PRODUCTION_IMAGE_SETTINGS),
     )
 
 
@@ -149,6 +154,7 @@ def run_detail(run: Run) -> RunDetailPayload:
         **run_summary(run).model_dump(),
         review_items=run.review_items,
         overrides=run.overrides,
+        production_models=run.production_models,
         items=[ItemPayload.from_item(item) for item in run.items],
         assets=[
             AssetStatusPayload(label=asset.label, ok=asset.ok, error=asset.error)

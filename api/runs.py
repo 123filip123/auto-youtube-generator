@@ -16,8 +16,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
 
+import config
 import pipeline
-from api.config_view import apply_overrides
+from api.config_view import apply_overrides, run_overrides
 from models import Item, save_items
 from utils.openai_support import TaskResult
 from utils.paths import list_items_path, slugify
@@ -67,6 +68,7 @@ class Run:
     num_items: int
     review_items: bool
     overrides: dict[str, Any]
+    production_models: bool = False
     status: str = STATUS_PENDING
     created_at: str = field(default_factory=_now)
     finished_at: str | None = None
@@ -128,6 +130,7 @@ class RunStore:
         *,
         review_items: bool,
         overrides: dict[str, Any],
+        production_models: bool = False,
     ) -> Run:
         """Register a run and execute it on a daemon thread."""
         with self._lock:
@@ -143,6 +146,7 @@ class RunStore:
                 num_items=num_items,
                 review_items=review_items,
                 overrides=dict(overrides),
+                production_models=production_models,
             )
             self._runs[run.id] = run
             self._order.append(run.id)
@@ -256,7 +260,14 @@ class RunStore:
             self._log(run, message)
 
         try:
-            with apply_overrides(run.overrides):
+            with apply_overrides(
+                run_overrides(run.overrides, run.production_models)
+            ):
+                if run.production_models:
+                    log(
+                        f"Production models: images use {config.IMAGE_MODEL} "
+                        f"at {config.IMAGE_QUALITY} quality."
+                    )
                 self._check_cancelled(gate)
                 self._set_status(run, "generating_list")
                 items = pipeline.generate_items_stage(

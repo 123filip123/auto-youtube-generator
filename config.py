@@ -55,6 +55,15 @@ IMAGE_MODEL = _env_str("IMAGE_MODEL", "gpt-image-1")
 IMAGE_SIZE = _env_str("IMAGE_SIZE", "1024x1024")
 IMAGE_QUALITY = _env_str("IMAGE_QUALITY", "medium")
 
+# What the web UI's "Production models" option swaps in for one run. The
+# defaults above are the cheap ones, for iterating. IMAGE_SIZE is left out on
+# purpose: the title is drawn beneath the image, and a portrait image pushes
+# it off the bottom of the frame.
+PRODUCTION_IMAGE_SETTINGS = {
+    "IMAGE_MODEL": "gpt-image-2",
+    "IMAGE_QUALITY": "high",
+}
+
 # --- Pipeline shape ------------------------------------------------------
 IMAGE_PROMPTS_PER_ITEM = _env_int("IMAGE_PROMPTS_PER_ITEM", 3)
 MAX_CONCURRENT_REQUESTS = _env_int("MAX_CONCURRENT_REQUESTS", 4)

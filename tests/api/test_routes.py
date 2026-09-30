@@ -185,3 +185,42 @@ def test_a_built_frontend_is_served_with_an_spa_fallback(tmp_path, monkeypatch):
         assert http.get("/favicon.svg").text == "<svg/>"
         assert http.get("/api/health").json() == {"status": "ok"}
         assert http.get("/api/runs/nope").status_code == 404
+
+
+def test_config_reports_the_production_image_settings(client):
+    payload = client.get("/api/config").json()
+    assert payload["production_image_settings"] == {
+        "IMAGE_MODEL": "gpt-image-2",
+        "IMAGE_QUALITY": "high",
+    }
+    assert "PRODUCTION_IMAGE_SETTINGS" not in payload["values"]
+
+
+def test_creating_a_production_run_echoes_the_flag(client, monkeypatch):
+    stub_stages(monkeypatch)
+    response = client.post(
+        "/api/runs",
+        json={"topic": "Birds", "num_items": 1, "production_models": True},
+    )
+    assert response.status_code == 201
+    body = response.json()
+    assert body["production_models"] is True
+    assert body["overrides"] == {}
+    assert client.get(f"/api/runs/{body['id']}").json()["production_models"] is True
+
+
+def test_creating_a_run_defaults_to_cheap_models(client, monkeypatch):
+    stub_stages(monkeypatch)
+    response = client.post("/api/runs", json={"topic": "Birds", "num_items": 1})
+    assert response.status_code == 201
+    assert response.json()["production_models"] is False
+
+
+def test_creating_a_run_rejects_a_null_production_flag(client, monkeypatch):
+    # Stubbed so that a regression here cannot start a real, paid run.
+    stub_stages(monkeypatch)
+    response = client.post(
+        "/api/runs",
+        json={"topic": "Birds", "num_items": 1, "production_models": None},
+    )
+    assert response.status_code == 422

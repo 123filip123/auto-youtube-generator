@@ -50,3 +50,28 @@ def test_non_positive_env_raises(monkeypatch):
 def restore_config():
     yield
     importlib.reload(config)
+
+
+def test_default_image_models_are_the_cheap_ones():
+    module = importlib.reload(config)
+    assert module.IMAGE_MODEL == "gpt-image-1"
+    assert module.IMAGE_SIZE == "1024x1024"
+    assert module.IMAGE_QUALITY == "medium"
+
+
+def test_production_image_settings_select_the_better_model():
+    assert config.PRODUCTION_IMAGE_SETTINGS == {
+        "IMAGE_MODEL": "gpt-image-2",
+        "IMAGE_QUALITY": "high",
+    }
+
+
+def test_production_image_settings_name_real_constants():
+    for name in config.PRODUCTION_IMAGE_SETTINGS:
+        assert hasattr(config, name)
+
+
+def test_production_image_settings_keep_the_image_square():
+    # The title is drawn beneath the image; a portrait image pushes it off
+    # the bottom of the 1920px frame.
+    assert "IMAGE_SIZE" not in config.PRODUCTION_IMAGE_SETTINGS

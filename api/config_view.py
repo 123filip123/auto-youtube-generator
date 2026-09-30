@@ -57,12 +57,19 @@ class ConfigOverrideError(ValueError):
 
 
 def effective_config() -> dict[str, Any]:
-    """Every config constant currently in force, newest overrides included."""
-    return {
-        name: getattr(config, name)
-        for name in dir(config)
-        if name.isupper() and not name.startswith("_")
-    }
+    """Every scalar config constant currently in force, overrides included.
+
+    Presets such as `PRODUCTION_IMAGE_SETTINGS` are not settings in their own
+    right and the UI renders each value as plain text, so they are left out.
+    """
+    values: dict[str, Any] = {}
+    for name in dir(config):
+        if not name.isupper() or name.startswith("_"):
+            continue
+        value = getattr(config, name)
+        if isinstance(value, (str, int, float)):
+            values[name] = value
+    return values
 
 
 def _clean_int(field: OverridableField, value: Any) -> int:
@@ -101,6 +108,19 @@ def validate_overrides(raw: dict[str, Any]) -> dict[str, Any]:
             _clean_int(field, value) if field.type == "int" else _clean_str(field, value)
         )
     return cleaned
+
+
+def run_overrides(
+    overrides: dict[str, Any], production_models: bool
+) -> dict[str, Any]:
+    """The constants to swap in for one run.
+
+    The production preset sits underneath whatever was named explicitly, which
+    is what lets a production run dial one knob back.
+    """
+    if not production_models:
+        return dict(overrides)
+    return {**config.PRODUCTION_IMAGE_SETTINGS, **overrides}
 
 
 @contextmanager

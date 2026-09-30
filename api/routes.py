@@ -48,6 +48,7 @@ def create_run(payload: schemas.CreateRunRequest, store: RunStore = Depends(get_
             payload.num_items,
             review_items=payload.review_items,
             overrides=overrides,
+            production_models=payload.production_models,
         )
     except RunConflictError as exc:
         raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc

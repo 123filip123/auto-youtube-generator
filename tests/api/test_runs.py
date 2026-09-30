@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+import config
 from api.runs import RunConflictError, RunNotFoundError, RunStore
 from models import Item
 
@@ -154,3 +155,109 @@ def test_overrides_apply_only_while_the_run_executes(tmp_path, monkeypatch):
 
     assert seen == ["low"]
     assert config.IMAGE_QUALITY == original
+
+
+def capture_image_settings(monkeypatch):
+    """Record the image settings in force when the media stage runs."""
+    seen = {}
+
+    def media_stage(items, client=None, log=print, on_asset=None):
+        seen["model"] = config.IMAGE_MODEL
+        seen["quality"] = config.IMAGE_QUALITY
+
+    monkeypatch.setattr("api.runs.pipeline.generate_media_stage", media_stage)
+    return seen
+
+
+def test_a_production_run_generates_with_the_production_image_settings(
+    tmp_path, monkeypatch
+):
+    monkeypatch.chdir(tmp_path)
+    stub_stages(monkeypatch)
+    seen = capture_image_settings(monkeypatch)
+    before = (config.IMAGE_MODEL, config.IMAGE_QUALITY)
+
+    store = RunStore()
+    run = store.start(
+        "Birds", 1, review_items=False, overrides={}, production_models=True
+    )
+    store.wait_for_idle()
+
+    finished = store.get(run.id)
+    assert finished.status == "completed"
+    assert finished.production_models is True
+    assert seen == {"model": "gpt-image-2", "quality": "high"}
+    # Only what the user typed is recorded as an override.
+    assert finished.overrides == {}
+    assert (config.IMAGE_MODEL, config.IMAGE_QUALITY) == before
+
+
+def test_a_run_is_cheap_unless_production_models_is_asked_for(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    stub_stages(monkeypatch)
+    seen = capture_image_settings(monkeypatch)
+
+    store = RunStore()
+    run = store.start("Birds", 1, review_items=False, overrides={})
+    store.wait_for_idle()
+
+    assert store.get(run.id).production_models is False
+    assert seen == {"model": config.IMAGE_MODEL, "quality": config.IMAGE_QUALITY}
+    assert seen["model"] != "gpt-image-2"
+
+
+def test_an_override_beats_the_preset_inside_a_production_run(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    stub_stages(monkeypatch)
+    seen = capture_image_settings(monkeypatch)
+
+    store = RunStore()
+    store.start(
+        "Birds",
+        1,
+        review_items=False,
+        overrides={"IMAGE_QUALITY": "low"},
+        production_models=True,
+    )
+    store.wait_for_idle()
+
+    assert seen == {"model": "gpt-image-2", "quality": "low"}
+
+
+def test_a_reviewed_production_run_keeps_the_preset(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    stub_stages(monkeypatch)
+    seen = capture_image_settings(monkeypatch)
+
+    store = RunStore()
+    run = store.start(
+        "Birds", 1, review_items=True, overrides={}, production_models=True
+    )
+    store.wait_for_status(run.id, "awaiting_review")
+    store.approve_items(run.id, one_item())
+    store.wait_for_idle()
+
+    assert store.get(run.id).status == "completed"
+    assert seen == {"model": "gpt-image-2", "quality": "high"}
+
+
+def test_a_failed_production_run_restores_the_defaults(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    stub_stages(monkeypatch)
+    before = (config.IMAGE_MODEL, config.IMAGE_QUALITY)
+
+    def explode(items, client=None, log=print, on_asset=None):
+        raise RuntimeError("no access to gpt-image-2")
+
+    monkeypatch.setattr("api.runs.pipeline.generate_media_stage", explode)
+
+    store = RunStore()
+    run = store.start(
+        "Birds", 1, review_items=False, overrides={}, production_models=True
+    )
+    store.wait_for_idle()
+
+    failed = store.get(run.id)
+    assert failed.status == "failed"
+    assert "no access to gpt-image-2" in failed.error
+    assert (config.IMAGE_MODEL, config.IMAGE_QUALITY) == before
