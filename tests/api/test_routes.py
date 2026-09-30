@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api.app import create_app
+from api.runs import RunConflictError
 from models import Item
 
 
@@ -45,6 +46,16 @@ def client(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     with TestClient(create_app()) as test_client:
         yield test_client
+        # A worker must not outlive the stubs this test installed: stop any
+        # run still waiting on review, then let the thread finish.
+        store = test_client.app.state.run_store
+        active = store.active()
+        if active is not None:
+            try:
+                store.cancel(active.id)
+            except RunConflictError:
+                pass  # It finished on its own between the two calls.
+        store.wait_for_idle()
 
 
 def test_health(client):
