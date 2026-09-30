@@ -14,6 +14,7 @@ function makeRun(overrides: Partial<RunDetail> = {}): RunDetail {
     finished_at: null,
     review_items: false,
     overrides: {},
+    production_models: false,
     items: [],
     assets: [],
     asset_total: 0,

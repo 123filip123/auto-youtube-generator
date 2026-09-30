@@ -53,6 +53,7 @@ export interface RunSummary {
 export interface RunDetail extends RunSummary {
   review_items: boolean;
   overrides: Record<string, string | number>;
+  production_models: boolean;
   items: ItemPayload[];
   assets: AssetStatus[];
   asset_total: number;
@@ -67,6 +68,7 @@ export interface CreateRunRequest {
   num_items: number;
   review_items: boolean;
   overrides: Record<string, string | number>;
+  production_models: boolean;
 }
 
 export interface ConfigField {
@@ -79,6 +81,7 @@ export interface ConfigField {
 export interface ConfigPayload {
   values: Record<string, string | number>;
   overridable: ConfigField[];
+  production_image_settings: Record<string, string>;
 }
 
 export interface ArchiveSummary {

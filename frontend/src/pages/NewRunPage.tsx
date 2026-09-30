@@ -10,12 +10,24 @@ import { Label } from "@/components/ui/label";
 import { createRun, getConfig } from "@/lib/api";
 import type { ConfigField } from "@/lib/types";
 
+/** One line saying what the production option switches to, or null. */
+function describeProduction(settings: Record<string, string>): string | null {
+  const parts = [
+    settings.IMAGE_MODEL,
+    settings.IMAGE_QUALITY && `${settings.IMAGE_QUALITY} quality`,
+  ].filter(Boolean);
+  if (parts.length === 0) return null;
+  return `Images: ${parts.join(", ")}. Slower and more expensive.`;
+}
+
 export default function NewRunPage() {
   const navigate = useNavigate();
 
   const [topic, setTopic] = useState("");
   const [numItems, setNumItems] = useState(5);
   const [reviewItems, setReviewItems] = useState(false);
+  const [productionModels, setProductionModels] = useState(false);
+  const [production, setProduction] = useState<Record<string, string>>({});
   const [fields, setFields] = useState<ConfigField[]>([]);
   const [current, setCurrent] = useState<Record<string, string | number>>({});
   const [overrides, setOverrides] = useState<Record<string, string>>({});
@@ -27,6 +39,7 @@ export default function NewRunPage() {
       .then((payload) => {
         setFields(payload.overridable);
         setCurrent(payload.values);
+        setProduction(payload.production_image_settings ?? {});
       })
       .catch(() => {
         // The form still works without the override section.
@@ -58,6 +71,7 @@ export default function NewRunPage() {
         num_items: numItems,
         review_items: reviewItems,
         overrides: filled,
+        production_models: productionModels,
       });
       navigate(`/runs/${run.id}`);
     } catch (caught) {
@@ -106,6 +120,24 @@ export default function NewRunPage() {
             <Label htmlFor="review" className="font-normal">
               Let me review the items before generating media
             </Label>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="production"
+                checked={productionModels}
+                onCheckedChange={(checked) => setProductionModels(checked === true)}
+              />
+              <Label htmlFor="production" className="font-normal">
+                Production models
+              </Label>
+            </div>
+            {describeProduction(production) && (
+              <p className="text-xs text-muted-foreground">
+                {describeProduction(production)}
+              </p>
+            )}
           </div>
         </CardContent>
       </Card>

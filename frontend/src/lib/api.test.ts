@@ -25,6 +25,7 @@ describe("api client", () => {
       num_items: 3,
       review_items: true,
       overrides: {},
+      production_models: false,
     });
 
     expect(run.id).toBe("abc");
@@ -36,6 +37,7 @@ describe("api client", () => {
       num_items: 3,
       review_items: true,
       overrides: {},
+      production_models: false,
     });
   });
 

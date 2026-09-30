@@ -133,8 +133,23 @@ The UI can:
   and image prompts before any images or narration are paid for
 - override any of the tunables listed under [Configuration](#configuration) for
   a single run, without editing `.env`
+- switch a single run to production image models with the **Production
+  models** checkbox on the New Run page
 - browse every archived run in `generated_data/` with its images, narration and
   video
+
+#### Production models
+
+The defaults are the cheap models, for iterating: `gpt-4.1-mini` writes the
+list, `gpt-image-1` at `medium` quality draws the images and
+`gpt-4o-mini-tts` narrates. Ticking **Production models** generates that run's
+images with `gpt-image-2` at `high` quality instead. It is slower and costs
+more, and it changes image generation only.
+
+Anything you type into the per-run override fields still wins, so a production
+run with `IMAGE_QUALITY` set to `low` uses `gpt-image-2` at `low`. The preset
+lives in `PRODUCTION_IMAGE_SETTINGS` in `config.py`. The CLI always uses the
+defaults; set `IMAGE_MODEL` and `IMAGE_QUALITY` in `.env` to change them there.
 
 **Only one run can be active at a time.** `outputs/` is a single shared
 workspace with fixed filenames, so starting a second run while one is in flight

@@ -35,6 +35,7 @@ const base = {
   finished_at: null,
   review_items: false,
   overrides: {},
+  production_models: false,
   items: [],
   assets: [],
   asset_total: 0,
@@ -90,6 +91,20 @@ describe("RunPage", () => {
       "href",
       "/archives/birds",
     );
+  });
+
+  it("marks a run that used production models", async () => {
+    mockRun({ ...base, status: "generating_media", production_models: true });
+    renderPage();
+    expect(await screen.findByText("Birds")).toBeInTheDocument();
+    expect(screen.getByText("Production models")).toBeInTheDocument();
+  });
+
+  it("does not mark a run on the default models", async () => {
+    mockRun({ ...base, status: "generating_media" });
+    renderPage();
+    expect(await screen.findByText("Birds")).toBeInTheDocument();
+    expect(screen.queryByText("Production models")).toBeNull();
   });
 
   it("shows the log lines", async () => {

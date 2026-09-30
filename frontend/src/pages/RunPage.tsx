@@ -5,6 +5,7 @@ import ItemEditor from "@/components/ItemEditor";
 import LogPanel from "@/components/LogPanel";
 import StageProgress from "@/components/StageProgress";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRun } from "@/hooks/useRun";
@@ -42,6 +43,11 @@ export default function RunPage() {
           <p className="text-sm text-muted-foreground">
             {run.num_items} items · {run.status}
           </p>
+          {run.production_models && (
+            <Badge variant="secondary" className="mt-1">
+              Production models
+            </Badge>
+          )}
         </div>
         {!finished && (
           <Button variant="outline" onClick={onCancel}>
