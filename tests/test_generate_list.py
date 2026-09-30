@@ -76,6 +76,36 @@ def test_prompt_keeps_the_safety_and_copyright_guidance():
     assert "copyrighted" in user_message.lower()
 
 
+def user_message_for(topic="extinct animals", count=3):
+    client = FakeClient(json.dumps(build_payload(count=count)))
+    generate_list(topic, count, client=client)
+    return client.calls[0]["messages"][1]["content"]
+
+
+def test_prompt_gives_each_image_a_job_tied_to_the_narration():
+    message = user_message_for().lower()
+    assert "hero shot" in message
+    assert "most surprising fact" in message
+    assert "description" in message.split("most surprising fact")[1][:200]
+    assert "unexpected" in message
+
+
+def test_prompt_no_longer_asks_for_a_bare_name_or_a_random_style():
+    message = user_message_for()
+    # "Dodo Bird" and "Dodo Bird in a cubist art style" is what these produced.
+    assert "should just be the item name" not in message
+    assert "different style" not in message
+
+
+def test_prompt_says_what_to_do_with_a_different_image_count(monkeypatch):
+    monkeypatch.setattr("config.IMAGE_PROMPTS_PER_ITEM", 5)
+    client = FakeClient(json.dumps(build_payload(prompts=5)))
+    generate_list("extinct animals", 3, client=client)
+    message = client.calls[0]["messages"][1]["content"]
+    assert "Exactly 5" in message
+    assert "starting again from the first" in message
+
+
 def test_schema_root_is_an_object():
     # OpenAI strict mode requires an object at the root, not an array.
     assert LIST_JSON_SCHEMA["type"] == "object"
