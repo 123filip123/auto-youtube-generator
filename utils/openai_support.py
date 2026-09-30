@@ -48,6 +48,18 @@ def with_retry(fn: Callable) -> Callable:
     )(fn)
 
 
+def temperature_kwargs() -> dict[str, float]:
+    """The `temperature` argument for a text call, or nothing at all.
+
+    GPT-5-series models reject every temperature but their own default, so
+    the quality tier leaves `TEXT_TEMPERATURE` unset and the argument has to
+    be absent from the request rather than merely set to the default.
+    """
+    if config.TEXT_TEMPERATURE is None:
+        return {}
+    return {"temperature": config.TEXT_TEMPERATURE}
+
+
 @dataclass
 class TaskResult:
     """The outcome of one parallel job: either a value or the error it raised."""

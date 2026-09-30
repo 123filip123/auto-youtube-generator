@@ -52,3 +52,58 @@ def test_non_positive_env_raises(monkeypatch):
 def restore_config():
     yield
     importlib.reload(config)
+
+
+def test_storyboard_style_allows_recognisable_features():
+    module = importlib.reload(config)
+    style = module.STORYBOARD_STYLE.lower()
+    assert "hair" in style
+    # A featureless round head cannot resemble anyone in particular.
+    assert "minimal interior detail" not in style
+
+
+def test_default_tier_is_draft():
+    module = importlib.reload(config)
+    assert module.MODEL_TIER == "draft"
+    assert module.TEXT_MODEL == "gpt-4.1-mini"
+    assert module.TEXT_TEMPERATURE == pytest.approx(0.7)
+    assert module.IMAGE_MODEL == "gpt-image-1"
+    assert module.IMAGE_SIZE == "1024x1024"
+    assert module.IMAGE_QUALITY == "medium"
+
+
+def test_quality_tier_selects_the_premium_models(monkeypatch):
+    module = reload_config(monkeypatch, MODEL_TIER="quality")
+    assert module.TEXT_MODEL == "gpt-5.5"
+    assert module.IMAGE_MODEL == "gpt-image-2"
+    assert module.IMAGE_QUALITY == "high"
+
+
+def test_quality_tier_draws_portrait_images(monkeypatch):
+    # A square image fills barely half a 1080x1920 frame; portrait fills it.
+    module = reload_config(monkeypatch, MODEL_TIER="quality")
+    assert module.IMAGE_SIZE == "1024x1536"
+
+
+def test_quality_tier_leaves_the_temperature_unset(monkeypatch):
+    # GPT-5 models reject every temperature but their own default.
+    module = reload_config(monkeypatch, MODEL_TIER="quality")
+    assert module.TEXT_TEMPERATURE is None
+
+
+def test_tts_is_the_same_on_both_tiers(monkeypatch):
+    # gpt-4o-mini-tts is the only speech model that honours `instructions`,
+    # so there is no higher tier to move up to.
+    draft = importlib.reload(config).TTS_MODEL
+    assert reload_config(monkeypatch, MODEL_TIER="quality").TTS_MODEL == draft
+
+
+def test_an_explicit_env_var_beats_the_tier(monkeypatch):
+    module = reload_config(monkeypatch, MODEL_TIER="quality", IMAGE_QUALITY="low")
+    assert module.IMAGE_QUALITY == "low"
+    assert module.IMAGE_MODEL == "gpt-image-2"
+
+
+def test_an_unknown_tier_raises(monkeypatch):
+    with pytest.raises(ValueError, match="MODEL_TIER"):
+        reload_config(monkeypatch, MODEL_TIER="cheap")

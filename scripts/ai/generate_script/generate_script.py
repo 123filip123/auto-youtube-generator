@@ -3,7 +3,7 @@
 import config
 from models import Script, parse_script, with_estimated_timings
 from utils.open_ai_client import get_open_ai_client
-from utils.openai_support import with_retry
+from utils.openai_support import temperature_kwargs, with_retry
 from utils.timing import word_budget
 
 # Anything shorter than this cannot carry a hook and a payoff.
@@ -102,14 +102,13 @@ def build_script_message(topic: str, target_seconds: int) -> str:
         f"- If the topic involves potentially sensitive subjects, focus on "
         f"positive, educational, or neutral representations\n"
         f"\n"
-        f"COPYRIGHT AND INTELLECTUAL PROPERTY GUIDELINES:\n"
-        f"- NEVER reference copyrighted characters, brands, or intellectual "
-        f"property\n"
-        f"- Avoid specific character names like 'Yoda', 'Mickey Mouse', "
-        f"'Superman', 'Mario', etc.\n"
-        f"- Avoid famous logos, brand names, or trademarked symbols\n"
-        f"- Focus on visual concepts, emotions, and themes rather than "
-        f"specific copyrighted entities"
+        f"NAMING THE SUBJECT:\n"
+        f"- When the topic is a specific person, character, place or thing, "
+        f"call it by name, and keep calling it by name throughout.\n"
+        f"- Never swap the subject for an anonymous stand-in such as 'a "
+        f"famous rapper' or 'a certain scientist'.\n"
+        f"- The storyboard is drawn from this script alone, so a subject the "
+        f"script does not name cannot be drawn."
     )
 
 
@@ -121,7 +120,7 @@ def _request_script(client, topic: str, target_seconds: int) -> str | None:
             {"role": "system", "content": SCRIPT_SYSTEM_MESSAGE},
             {"role": "user", "content": build_script_message(topic, target_seconds)},
         ],
-        temperature=config.TEXT_TEMPERATURE,
+        **temperature_kwargs(),
         response_format={
             "type": "json_schema",
             "json_schema": {

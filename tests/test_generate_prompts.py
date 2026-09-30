@@ -162,3 +162,46 @@ def test_message_explains_the_chain_and_the_reset():
     message = build_prompts_message(script, shot_budgets(script))
     assert "continuation" in message or "continues" in message
     assert "style sheet" in message.lower()
+
+
+def test_message_requires_a_named_subject_to_be_drawn_in_its_likeness():
+    script = build_script()
+    message = build_prompts_message(script, shot_budgets(script))
+    assert "likeness" in message.lower()
+    # The old rule laundered a named subject into an anonymous stand-in,
+    # which is exactly what produced a stranger instead of the person.
+    assert "wise green alien mentor" not in message
+    assert "generic descriptions" not in message
+
+
+def test_message_lets_a_real_subject_keep_its_true_colours():
+    script = build_script()
+    message = build_prompts_message(script, shot_budgets(script))
+    # The vivid-palette rule must not repaint skin or hair.
+    assert "skin" in message.lower()
+
+
+def test_section_openers_must_restate_the_likeness():
+    script = build_script()
+    message = build_prompts_message(script, shot_budgets(script))
+    opener_rule = message.split("The FIRST drawing of every section")[1]
+    opener_rule = opener_rule.split("- Every LATER drawing")[0]
+    assert "likeness" in opener_rule.lower()
+
+
+def test_style_schema_asks_for_the_named_subject():
+    assert "likeness" in PROMPTS_JSON_SCHEMA["properties"]["style"]["description"]
+
+
+def test_sends_the_configured_temperature(monkeypatch):
+    monkeypatch.setattr(config, "TEXT_TEMPERATURE", 0.4)
+    client = FakeClient(build_response([2, 4]))
+    generate_prompts(build_script(), client=client)
+    assert client.calls[0]["temperature"] == pytest.approx(0.4)
+
+
+def test_omits_the_temperature_when_the_model_refuses_one(monkeypatch):
+    monkeypatch.setattr(config, "TEXT_TEMPERATURE", None)
+    client = FakeClient(build_response([2, 4]))
+    generate_prompts(build_script(), client=client)
+    assert "temperature" not in client.calls[0]

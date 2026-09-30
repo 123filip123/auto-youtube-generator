@@ -5,11 +5,13 @@ from concurrent.futures import ThreadPoolExecutor
 import openai
 import pytest
 
+import config
 from utils.openai_support import (
     RETRYABLE_EXCEPTIONS,
     TaskResult,
     describe_failures,
     run_all,
+    temperature_kwargs,
     with_retry,
 )
 
@@ -168,3 +170,15 @@ def test_run_all_reports_failures_to_the_callback():
     assert len(seen) == 1
     assert not seen[0].ok
     assert isinstance(seen[0].error, ValueError)
+
+
+def test_temperature_kwargs_carries_the_configured_temperature(monkeypatch):
+    monkeypatch.setattr(config, "TEXT_TEMPERATURE", 0.4)
+    assert temperature_kwargs() == {"temperature": 0.4}
+
+
+def test_temperature_kwargs_is_empty_when_the_model_refuses_one(monkeypatch):
+    # A GPT-5 model 400s on any temperature but its own default, so the
+    # argument has to be absent rather than set to the default.
+    monkeypatch.setattr(config, "TEXT_TEMPERATURE", None)
+    assert temperature_kwargs() == {}

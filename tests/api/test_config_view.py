@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 import config
@@ -19,7 +21,9 @@ def test_effective_config_exposes_uppercase_constants():
 
 def test_effective_config_values_are_json_safe():
     for name, value in effective_config().items():
-        assert isinstance(value, (str, int, float)), f"{name} is {type(value)}"
+        assert isinstance(value, (str, int, float, type(None))), (
+            f"{name} is {type(value)}"
+        )
 
 
 def test_every_overridable_field_names_a_real_constant():
@@ -66,3 +70,35 @@ def test_storyboard_style_is_overridable():
     assert validate_overrides({"STORYBOARD_STYLE": "  crayon doodles  "}) == {
         "STORYBOARD_STYLE": "crayon doodles"
     }
+
+
+def test_model_tier_is_overridable():
+    assert "MODEL_TIER" in [field.name for field in OVERRIDABLE]
+
+
+def test_applying_the_quality_tier_swaps_every_model_it_covers():
+    with apply_overrides({"MODEL_TIER": "quality"}):
+        assert config.TEXT_MODEL == "gpt-5.5"
+        assert config.IMAGE_MODEL == "gpt-image-2"
+        assert config.IMAGE_SIZE == "1024x1536"
+        assert config.IMAGE_QUALITY == "high"
+        assert config.TEXT_TEMPERATURE is None
+    assert config.TEXT_MODEL == "gpt-4.1-mini"
+    assert config.TEXT_TEMPERATURE == pytest.approx(0.7)
+
+
+def test_an_explicit_field_beats_the_tier_it_arrives_with():
+    with apply_overrides({"MODEL_TIER": "quality", "IMAGE_QUALITY": "low"}):
+        assert config.IMAGE_QUALITY == "low"
+        assert config.IMAGE_MODEL == "gpt-image-2"
+
+
+def test_validate_overrides_rejects_an_unknown_tier():
+    with pytest.raises(ConfigOverrideError):
+        validate_overrides({"MODEL_TIER": "cheap"})
+
+
+def test_effective_config_survives_an_unset_temperature(monkeypatch):
+    # The quality tier leaves TEXT_TEMPERATURE unset; null is still JSON-safe.
+    monkeypatch.setattr(config, "TEXT_TEMPERATURE", None)
+    json.dumps(effective_config())

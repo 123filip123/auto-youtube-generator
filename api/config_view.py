@@ -25,6 +25,13 @@ class OverridableField:
 
 OVERRIDABLE: tuple[OverridableField, ...] = (
     OverridableField(
+        "MODEL_TIER",
+        "str",
+        config.tier_names(),
+        "Cheap models to iterate with, or expensive ones to publish with. "
+        "Sets the text and image models; anything set below wins over it.",
+    ),
+    OverridableField(
         "TEXT_MODEL", "str", None, "Writes the script and the drawing prompts."
     ),
     OverridableField("TTS_MODEL", "str", None, "Generates the narration."),
@@ -111,9 +118,25 @@ def validate_overrides(raw: dict[str, Any]) -> dict[str, Any]:
     return cleaned
 
 
+def _expand_tier(overrides: dict[str, Any]) -> dict[str, Any]:
+    """Turn a `MODEL_TIER` override into the constants that tier stands for.
+
+    A tier is shorthand, not a setting the pipeline reads, so it has to be
+    unpacked before the constants are swapped. Anything named explicitly
+    alongside it wins, which is what lets you run the quality tier with one
+    knob dialled back.
+    """
+    if "MODEL_TIER" not in overrides:
+        return dict(overrides)
+    expanded = config.tier_values(overrides["MODEL_TIER"])
+    expanded.update(overrides)
+    return expanded
+
+
 @contextmanager
 def apply_overrides(overrides: dict[str, Any]) -> Iterator[None]:
     """Swap config constants for the duration of the block, then restore them."""
+    overrides = _expand_tier(overrides)
     previous = {name: getattr(config, name) for name in overrides}
     for name, value in overrides.items():
         setattr(config, name, value)

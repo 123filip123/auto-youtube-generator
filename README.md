@@ -79,19 +79,44 @@ This app requires access to the OpenAI API for text, image, and audio generation
 ## Configuration
 
 Every tunable lives in `config.py` and can be overridden with an environment
-variable of the same name (see `.env.example`). The ones worth knowing:
+variable of the same name (see `.env.example`).
+
+### Model tier
+
+`MODEL_TIER` is the one switch between iterating cheaply and rendering
+something worth publishing. It sets the text and image models together:
+
+| | `draft` (default) | `quality` |
+|---|---|---|
+| `TEXT_MODEL` | `gpt-4.1-mini` | `gpt-5.5` |
+| `TEXT_TEMPERATURE` | `0.7` | unset — GPT-5 models reject any temperature but their own default |
+| `IMAGE_MODEL` | `gpt-image-1` | `gpt-image-2` |
+| `IMAGE_SIZE` | `1024x1024` | `1024x1536` |
+| `IMAGE_QUALITY` | `medium` | `high` |
+
+Set it in `.env` for every run, or pick it per run on the New Run page. Any
+individual variable you set yourself still wins over the tier, so
+`MODEL_TIER=quality` with `IMAGE_QUALITY=low` is a legal combination.
+
+The quality tier is far slower and far more expensive: a `high`-quality
+`gpt-image-2` frame takes roughly 75-80 seconds, against a few seconds on the
+draft tier. A full run generates one image per 2.5 seconds of narration, so
+expect a quality run to spend ten minutes or so in the image stage.
+
+Narration is the same on both tiers. `gpt-4o-mini-tts` is the only speech
+model that honours the `instructions` parameter, so moving to `tts-1-hd`
+would trade `TTS_INSTRUCTIONS` away for nothing.
+
+### Everything else
 
 | Variable | Default | What it does |
 |---|---|---|
 | `MAX_CONCURRENT_REQUESTS` | `4` | Parallel OpenAI calls. Lower it if you hit rate limits. |
 | `MAX_RETRIES` | `5` | Attempts per call before giving up. Rate limits and 5xx are retried with exponential backoff; content-policy rejections are not. |
-| `TEXT_MODEL` | `gpt-4.1-mini` | Generates the script. Must support JSON schema structured outputs. |
 | `TTS_MODEL` | `gpt-4o-mini-tts` | Narration. Must support the `instructions` parameter. |
 | `TTS_VOICE` | `ash` | Narration voice. |
-| `IMAGE_MODEL` | `gpt-image-1` | Image generation. |
-| `IMAGE_QUALITY` | `medium` | `low` is cheaper and faster; `high` is slower and costs more. |
 | `TARGET_VIDEO_SECONDS` | `85` | How long the finished script should run. |
-| `STORYBOARD_STYLE` | flat-colour stick-figure line art | The drawing style every frame shares. |
+| `STORYBOARD_STYLE` | flat-colour line art, recognisable features | The drawing style every frame shares. |
 | `VIDEO_PRESET` | `medium` | x264 preset. `ultrafast` renders quicker at a larger file size. |
 
 ---

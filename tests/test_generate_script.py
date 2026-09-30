@@ -90,10 +90,18 @@ def test_message_states_the_pause_corrected_word_budget():
     assert str(round(85 * config.NARRATION_WORDS_PER_SECOND)) not in message
 
 
-def test_message_keeps_the_safety_and_copyright_guidance():
+def test_message_keeps_the_safety_guidance():
     message = build_script_message("wolves", 85)
     assert "family-friendly" in message
-    assert "copyrighted" in message.lower()
+
+
+def test_message_asks_for_named_subjects_rather_than_stand_ins():
+    message = build_script_message("wolves", 85)
+    assert "by name" in message.lower()
+    # The old copyright block told the writer to avoid naming its subject,
+    # which left the storyboard call with nobody to draw.
+    assert "Yoda" not in message
+    assert "copyrighted" not in message.lower()
 
 
 def test_rejects_a_target_below_the_floor():
@@ -105,3 +113,17 @@ def test_surfaces_a_malformed_response():
     client = FakeClient(json.dumps({"title": "T", "sections": []}))
     with pytest.raises(InvalidScriptError):
         generate_script("wolves", 85, client=client)
+
+
+def test_sends_the_configured_temperature(monkeypatch):
+    monkeypatch.setattr(config, "TEXT_TEMPERATURE", 0.4)
+    client = FakeClient(json.dumps(build_payload()))
+    generate_script("wolves", 85, client=client)
+    assert client.calls[0]["temperature"] == pytest.approx(0.4)
+
+
+def test_omits_the_temperature_when_the_model_refuses_one(monkeypatch):
+    monkeypatch.setattr(config, "TEXT_TEMPERATURE", None)
+    client = FakeClient(json.dumps(build_payload()))
+    generate_script("wolves", 85, client=client)
+    assert "temperature" not in client.calls[0]

@@ -12,7 +12,7 @@ from typing import Sequence
 import config
 from models import Script
 from utils.open_ai_client import get_open_ai_client
-from utils.openai_support import with_retry
+from utils.openai_support import temperature_kwargs, with_retry
 from utils.timing import shot_count
 
 
@@ -34,7 +34,9 @@ PROMPTS_JSON_SCHEMA = {
             "description": (
                 "The recurring figure(s) and setting for the whole video, "
                 "described concretely enough to be redrawn identically in "
-                "every frame, naming a distinct vivid colour for each element."
+                "every frame, naming a distinct vivid colour for each "
+                "element. When the script names a real subject, name it here "
+                "too and describe its likeness."
             ),
         },
         "sections": {
@@ -92,15 +94,18 @@ def build_prompts_message(script: Script, budgets: Sequence[int]) -> str:
         f"for the whole video — their build, hair, clothing, props and "
         f"surroundings, and the colour of each — described concretely enough "
         f"that an illustrator could redraw them identically in every frame. "
-        f"Name a distinct, vivid colour for each element and avoid white, "
-        f"grey and black. Describe only what is drawn; do not name a medium "
-        f"or an art style. The style sheet is the ONLY thing that carries a "
-        f"character's look from one section to the next, so it must be "
-        f"specific enough to survive on its own.\n"
+        f"Name a distinct, vivid colour for each invented element and "
+        f"avoid white, grey and black. A named real subject outranks that "
+        f"rule: give their skin, hair and signature clothing their actual "
+        f"colours, whatever those are. Describe only what is drawn; do not "
+        f"name a medium or an art style. The style sheet is the ONLY thing "
+        f"that carries a character's look from one section to the next, so "
+        f"it must be specific enough to survive on its own.\n"
         f"\n"
         f"THEN write the prompts. How they chain matters:\n"
         f"- The FIRST drawing of every section is generated from its text "
-        f"alone, so it must be self-contained and establish the whole scene. "
+        f"alone, so it must be self-contained and establish the whole scene, "
+        f"naming any real subject and asking for their likeness again. "
         f"Never begin a section's first prompt with a back-reference.\n"
         f"- Every LATER drawing in a section is generated as a continuation "
         f"of the drawing immediately before it, so write it as a change: "
@@ -111,8 +116,9 @@ def build_prompts_message(script: Script, budgets: Sequence[int]) -> str:
         f"fresh visual start.\n"
         f"\n"
         f"DRAWING CONSTRAINTS:\n"
-        f"- The drawings are plain black outline sketches with stick-figure "
-        f"people. Describe simple shapes, poses and objects only.\n"
+        f"- The drawings are plain black outline sketches with simply drawn "
+        f"people. Describe simple shapes, poses and objects, plus the few "
+        f"features that make a person recognisable.\n"
         f"- Never ask for text, letters, numbers or labels in a drawing.\n"
         f"- Colours are solid flat fills inside the outlines. Never ask for "
         f"shading, gradients, texture or photographic detail.\n"
@@ -125,12 +131,19 @@ def build_prompts_message(script: Script, budgets: Sequence[int]) -> str:
         f"- Avoid prompts that could create images with nudity, sexual "
         f"content, or adult themes\n"
         f"\n"
-        f"COPYRIGHT AND INTELLECTUAL PROPERTY GUIDELINES:\n"
-        f"- NEVER include copyrighted characters, brands, or intellectual "
-        f"property in prompts\n"
-        f"- Use generic descriptions such as 'wise green alien mentor' "
-        f"instead of a specific character name\n"
-        f"- Avoid famous logos, brand names, or trademarked symbols"
+        f"DRAWING A NAMED SUBJECT:\n"
+        f"- When the script names a specific person, character or thing, "
+        f"draw that subject itself. Never substitute an anonymous stand-in.\n"
+        f"- Name the subject in the style sheet and describe what makes it "
+        f"recognisable at a glance: skin tone, hair length, shape and "
+        f"colour, facial hair, glasses or headwear, and the clothing it is "
+        f"known for.\n"
+        f"- Say it in the prompts as well as the style sheet — write 'drawn "
+        f"in the likeness of <name>' rather than trusting the description to "
+        f"speak for itself.\n"
+        f"- That description is what actually carries the resemblance, so "
+        f"make it specific enough that the subject would be recognised from "
+        f"the drawing alone."
     )
 
 
@@ -142,7 +155,7 @@ def _request_prompts(client, message: str) -> str | None:
             {"role": "system", "content": PROMPTS_SYSTEM_MESSAGE},
             {"role": "user", "content": message},
         ],
-        temperature=config.TEXT_TEMPERATURE,
+        **temperature_kwargs(),
         response_format={
             "type": "json_schema",
             "json_schema": {

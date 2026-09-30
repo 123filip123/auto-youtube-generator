@@ -3,9 +3,13 @@
 Each value may be overridden by an environment variable of the same name, so
 you can experiment (different model, higher concurrency, faster encode) without
 editing code. Values are read at import time.
+
+`MODEL_TIER` is the coarse switch: it sets the text and image models together,
+and any variable you set yourself still wins over what the tier chose.
 """
 
 import os
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -36,14 +40,67 @@ def _env_int(name: str, default: int) -> int:
     return value
 
 
+# --- Model tier ----------------------------------------------------------
+# One switch between the cheap models used to iterate on the pipeline and the
+# expensive ones used to render a video worth publishing. Every constant a
+# tier sets can still be pinned individually by its own environment variable,
+# which always wins over the tier.
+_MODEL_TIERS: dict[str, dict[str, Any]] = {
+    "draft": {
+        "TEXT_MODEL": "gpt-4.1-mini",
+        "TEXT_TEMPERATURE": 0.7,
+        "IMAGE_MODEL": "gpt-image-1",
+        "IMAGE_SIZE": "1024x1024",
+        "IMAGE_QUALITY": "medium",
+    },
+    "quality": {
+        # gpt-5.5 reasons before it writes, which is what buys the better
+        # script. It also rejects every temperature but its own default, so
+        # the tier leaves the temperature unset and we send no such argument.
+        "TEXT_MODEL": "gpt-5.5",
+        "TEXT_TEMPERATURE": None,
+        "IMAGE_MODEL": "gpt-image-2",
+        # Portrait, because compose_frames scales the drawing to the full
+        # 1080 width and centres it: a square drawing fills barely half the
+        # 1920-tall frame and leaves the rest as blurred filler.
+        "IMAGE_SIZE": "1024x1536",
+        "IMAGE_QUALITY": "high",
+    },
+}
+
+
+def tier_names() -> tuple[str, ...]:
+    """Every tier `MODEL_TIER` accepts."""
+    return tuple(_MODEL_TIERS)
+
+
+def tier_values(tier: str) -> dict[str, Any]:
+    """The constants `tier` stands for, or raise if it names no tier.
+
+    Lower-case on purpose: `effective_config()` collects the module's
+    upper-case names, and the tier table is machinery, not a setting.
+    """
+    try:
+        return dict(_MODEL_TIERS[tier])
+    except KeyError:
+        raise ValueError(
+            f"MODEL_TIER must be one of {', '.join(_MODEL_TIERS)}, got {tier!r}"
+        ) from None
+
+
+MODEL_TIER = _env_str("MODEL_TIER", "draft")
+_tier = tier_values(MODEL_TIER)
+
 # --- OpenAI models -------------------------------------------------------
-# gpt-4.1-mini supports JSON schema structured outputs, which is what lets us
-# drop the old markdown-fence-stripping hack.
-TEXT_MODEL = _env_str("TEXT_MODEL", "gpt-4.1-mini")
-TEXT_TEMPERATURE = 0.7
+# The text model must support JSON schema structured outputs, which is what
+# lets us drop the old markdown-fence-stripping hack.
+TEXT_MODEL = _env_str("TEXT_MODEL", _tier["TEXT_MODEL"])
+# None means "send no temperature at all" - see the quality tier above.
+TEXT_TEMPERATURE: float | None = _tier["TEXT_TEMPERATURE"]
 
 # gpt-4o-mini-tts is the model that actually honours the `instructions`
-# parameter. The old tts-1 silently ignored it.
+# parameter. The old tts-1 silently ignored it, and tts-1-hd still does, so
+# there is no higher tier to move the narration up to.
 TTS_MODEL = _env_str("TTS_MODEL", "gpt-4o-mini-tts")
 TTS_VOICE = _env_str("TTS_VOICE", "ash")
 TTS_INSTRUCTIONS = (
@@ -51,17 +108,19 @@ TTS_INSTRUCTIONS = (
     "YouTube video. Use a professional, conversational style."
 )
 
-IMAGE_MODEL = _env_str("IMAGE_MODEL", "gpt-image-1")
-IMAGE_SIZE = _env_str("IMAGE_SIZE", "1024x1024")
-IMAGE_QUALITY = _env_str("IMAGE_QUALITY", "medium")
+IMAGE_MODEL = _env_str("IMAGE_MODEL", _tier["IMAGE_MODEL"])
+IMAGE_SIZE = _env_str("IMAGE_SIZE", _tier["IMAGE_SIZE"])
+IMAGE_QUALITY = _env_str("IMAGE_QUALITY", _tier["IMAGE_QUALITY"])
 
 # The fixed look every generated frame shares. Prepended to every image
 # prompt, in front of the script's style sheet.
 STORYBOARD_STYLE = _env_str(
     "STORYBOARD_STYLE",
     "Black ink outline drawing filled with flat, bright colour on a plain "
-    "white background. Stick-figure people with simple round heads and "
-    "minimal interior detail. Clean even line weight, solid flat colour fills "
+    "white background. Simply drawn people with slim limbs and rounded "
+    "heads, carrying the few features that make a person recognisable: skin "
+    "tone, hair shape and colour, facial hair, glasses or headwear, and "
+    "signature clothing. Clean even line weight, solid flat colour fills "
     "with no shading or gradients, no text or lettering.",
 )
 
