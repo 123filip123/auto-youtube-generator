@@ -37,6 +37,14 @@ def ensure_output_dirs() -> None:
         directory.mkdir(parents=True, exist_ok=True)
 
 
+def clear_dir(directory: Path) -> None:
+    """Delete the files directly inside `directory`, keeping the directory."""
+    directory.mkdir(parents=True, exist_ok=True)
+    for entry in directory.iterdir():
+        if entry.is_file():
+            entry.unlink()
+
+
 def image_path(item_number: int, prompt_number: int) -> Path:
     return IMAGE_OUTPUT_DIR / f"item_{item_number:02d}_prompt_{prompt_number:02d}.png"
 

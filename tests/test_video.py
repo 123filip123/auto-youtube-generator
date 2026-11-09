@@ -6,6 +6,22 @@ from PIL import Image
 import config
 from models import Item
 from scripts.non_ai.generate_video_short.utils import segment_bounds, zoom_scale
+from utils.media import item_frame_paths
+from utils.paths import ensure_output_dirs, image_path, titled_image_path
+
+
+def test_item_frames_skip_images_that_failed(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    ensure_output_dirs()
+    for prompt_number in (1, 3):
+        image_path(1, prompt_number).write_bytes(b"image")
+    assert item_frame_paths(1, 3) == [titled_image_path(1, 1), titled_image_path(1, 3)]
+
+
+def test_item_frames_fall_back_to_one_placeholder_frame(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    ensure_output_dirs()
+    assert item_frame_paths(1, 3) == [titled_image_path(1, 1)]
 
 
 def test_zoom_starts_at_one():
@@ -73,8 +89,10 @@ def test_renders_a_real_video(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "VIDEO_FPS", 6)
     ensure_output_dirs()
 
+    # Prompt 2's image failed, so the item plays its other two.
     items = [Item("Dodo", "A bird.", ("a", "b", "c"))]
-    for prompt_number in range(1, 4):
+    for prompt_number in (1, 3):
+        image_path(1, prompt_number).write_bytes(b"image")
         Image.new("RGB", (108, 192), (20, 40, 60)).save(
             titled_image_path(1, prompt_number)
         )

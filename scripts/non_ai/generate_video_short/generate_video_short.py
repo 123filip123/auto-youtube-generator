@@ -8,6 +8,7 @@ from moviepy.editor import concatenate_videoclips
 
 import config
 from models import Item
+from utils.media import item_frame_paths
 from utils.paths import VIDEO_OUTPUT_DIR, video_output_path
 
 from .utils import build_item_clip
@@ -16,14 +17,16 @@ from .utils import build_item_clip
 def generate_video_short(items: Sequence[Item]) -> Path:
     """Render a 1080x1920 video from the titled images and narration on disk.
 
-    Each item shows its images in sequence over its narration, with a short
+    Each item shows the images it has in sequence over its narration, with a short
     silence before and after, and a slow zoom on every image.
     """
     VIDEO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     output_path = video_output_path()
 
     clips = [
-        build_item_clip(item_number, len(item.image_prompts))
+        build_item_clip(
+            item_number, item_frame_paths(item_number, len(item.image_prompts))
+        )
         for item_number, item in enumerate(items, start=1)
     ]
 

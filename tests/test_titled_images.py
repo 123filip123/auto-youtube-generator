@@ -10,6 +10,7 @@ from scripts.non_ai.create_titled_images_short.create_titled_images_short import
 )
 from scripts.non_ai.create_titled_images_short.utils import (
     blurred_background,
+    create_placeholder_titled_image,
     create_titled_image_short,
     load_title_font,
     scaled_height,
@@ -144,15 +145,42 @@ def test_batch_renders_every_item_prompt(tmp_path, monkeypatch):
     assert Path("outputs/titled_image_output/item_01_prompt_03_short.png").exists()
 
 
-def test_batch_reports_a_missing_source_without_crashing(tmp_path, monkeypatch):
+def test_batch_renders_only_the_images_an_item_has(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     Path("outputs/image_output").mkdir(parents=True)
     items = [Item("Dodo", "A bird.", ("a", "b", "c"))]
-    Image.new("RGB", (1024, 1024)).save(
-        Path("outputs/image_output/item_01_prompt_01.png")
-    )
+    for prompt_number in (1, 3):
+        Image.new("RGB", (1024, 1024)).save(
+            Path(f"outputs/image_output/item_01_prompt_{prompt_number:02d}.png")
+        )
 
     results = create_titled_images_for_items_short(items)
 
-    assert sum(1 for r in results if r.ok) == 1
-    assert sum(1 for r in results if not r.ok) == 2
+    assert len(results) == 2 and all(r.ok for r in results)
+    assert Path("outputs/titled_image_output/item_01_prompt_01_short.png").exists()
+    assert not Path("outputs/titled_image_output/item_01_prompt_02_short.png").exists()
+    assert Path("outputs/titled_image_output/item_01_prompt_03_short.png").exists()
+
+
+def test_batch_renders_a_placeholder_for_an_item_with_no_images(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    Path("outputs/image_output").mkdir(parents=True)
+    items = [Item("Dodo", "A bird.", ("a", "b", "c"))]
+
+    results = create_titled_images_for_items_short(items)
+
+    assert len(results) == 1 and results[0].ok
+    with Image.open("outputs/titled_image_output/item_01_prompt_01_short.png") as frame:
+        assert frame.size == (config.VIDEO_WIDTH, config.VIDEO_HEIGHT)
+
+
+def test_placeholder_draws_a_question_mark_in_the_image_area(tmp_path):
+    destination = tmp_path / "placeholder.png"
+    create_placeholder_titled_image("Dodo", destination)
+    with Image.open(destination) as frame:
+        background = frame.getpixel((5, 5))
+        image_area = frame.crop(
+            (0, config.VIDEO_HEIGHT // 4, config.VIDEO_WIDTH, config.VIDEO_HEIGHT // 2)
+        )
+        colours = {colour for _, colour in image_area.getcolors(maxcolors=1 << 16)}
+    assert colours - {background}, "nothing was drawn where the image would be"

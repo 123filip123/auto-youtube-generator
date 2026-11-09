@@ -136,29 +136,73 @@ def create_titled_image_short(
         )
         canvas = blurred_background(source, canvas_size)
 
-    foreground_top = (config.VIDEO_HEIGHT - foreground_height - 80) // 2
+    foreground_top = _foreground_top(foreground_height)
     canvas.paste(foreground, (0, foreground_top))
+    _draw_title(canvas, title, foreground_top + foreground_height)
 
+    canvas.save(destination)
+    return destination
+
+
+def _foreground_top(foreground_height: int) -> int:
+    return (config.VIDEO_HEIGHT - foreground_height - 80) // 2
+
+
+def _draw_title(canvas: Image.Image, title: str, image_bottom: int) -> None:
+    """Draw `title`, wrapped and centred, below an image ending at `image_bottom`."""
     font = load_title_font(config.TITLE_FONT_SIZE)
     max_text_width = config.VIDEO_WIDTH - (2 * config.TITLE_SIDE_MARGIN)
     lines = wrap_text(title, font, max_text_width)
+    if not lines:
+        return
 
-    if lines:
-        draw = ImageDraw.Draw(canvas)
-        line_height = config.TITLE_FONT_SIZE + config.TITLE_LINE_SPACING
-        block_height = len(lines) * line_height
-        block_top = (
-            foreground_top + foreground_height + config.TITLE_GAP_BELOW_IMAGE
+    draw = ImageDraw.Draw(canvas)
+    line_height = config.TITLE_FONT_SIZE + config.TITLE_LINE_SPACING
+    block_height = len(lines) * line_height
+    block_top = image_bottom + config.TITLE_GAP_BELOW_IMAGE
+    for index, line in enumerate(lines):
+        y = block_top + (index * line_height) - (block_height // 2)
+        draw.text(
+            (config.VIDEO_WIDTH // 2, y),
+            line,
+            fill=config.TITLE_COLOR,
+            font=font,
+            anchor="mm",
         )
-        for index, line in enumerate(lines):
-            y = block_top + (index * line_height) - (block_height // 2)
-            draw.text(
-                (config.VIDEO_WIDTH // 2, y),
-                line,
-                fill=config.TITLE_COLOR,
-                font=font,
-                anchor="mm",
-            )
+
+
+PLACEHOLDER_BACKGROUND = (235, 235, 235)
+PLACEHOLDER_PANEL = (200, 200, 200)
+PLACEHOLDER_MARK = (120, 120, 120)
+
+
+def create_placeholder_titled_image(title: str, destination: Path) -> Path:
+    """A frame for an item with no images: a large question mark and the title.
+
+    Laid out like a normal frame, with a square panel where a square image
+    would sit, so the title lands in the same place.
+    """
+    destination = Path(destination)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    canvas = Image.new("RGB", (config.VIDEO_WIDTH, config.VIDEO_HEIGHT),
+                       PLACEHOLDER_BACKGROUND)
+    panel_size = config.VIDEO_WIDTH
+    panel_top = _foreground_top(panel_size)
+    draw = ImageDraw.Draw(canvas)
+    draw.rectangle(
+        (0, panel_top, config.VIDEO_WIDTH, panel_top + panel_size),
+        fill=PLACEHOLDER_PANEL,
+    )
+    mark_font = load_title_font(panel_size // 2)
+    draw.text(
+        (config.VIDEO_WIDTH // 2, panel_top + panel_size // 2),
+        "?",
+        fill=PLACEHOLDER_MARK,
+        font=mark_font,
+        anchor="mm",
+    )
+    _draw_title(canvas, title, panel_top + panel_size)
 
     canvas.save(destination)
     return destination

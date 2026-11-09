@@ -222,3 +222,17 @@ def test_other_bad_requests_are_not_rewritten(tmp_path):
         generate_image("a dodo", tmp_path / "out.png", client=client)
     assert len(images.calls) == 1
     assert chat.calls == []
+
+
+def test_a_failed_image_job_removes_the_previous_runs_file(tmp_path, monkeypatch):
+    # outputs/ is reused between runs; a stale picture must not stand in for
+    # an image this run failed to make.
+    monkeypatch.chdir(tmp_path)
+    stale = Path("outputs/image_output/item_01_prompt_01.png")
+    stale.parent.mkdir(parents=True)
+    stale.write_bytes(PNG_BYTES)
+    client, _ = fake_client(error=RuntimeError("boom"))
+    (_, job), *_ = image_jobs(two_items(), client=client)
+    with pytest.raises(RuntimeError):
+        job()
+    assert not stale.exists()

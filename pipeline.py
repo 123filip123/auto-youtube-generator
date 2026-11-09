@@ -23,13 +23,16 @@ from scripts.non_ai.generate_video_short.generate_video_short import (
 from scripts.non_ai.save_to_generated_data.save_to_generated_data import (
     save_to_generated_data,
 )
+from utils.media import available_prompt_numbers, item_frame_paths, usable
 from utils.openai_support import TaskResult, describe_failures, run_all
 from utils.paths import (
+    AUDIO_OUTPUT_DIR,
+    IMAGE_OUTPUT_DIR,
+    TITLED_IMAGE_OUTPUT_DIR,
     audio_path,
+    clear_dir,
     ensure_output_dirs,
-    image_path,
     list_items_path,
-    titled_image_path,
 )
 
 TOTAL_STAGES = 5
@@ -42,34 +45,39 @@ class PipelineError(RuntimeError):
     """A stage produced incomplete output, so the pipeline cannot continue."""
 
 
-def _unusable(path: Path) -> bool:
-    """A file is unusable if it is absent or empty."""
-    return not path.exists() or path.stat().st_size == 0
-
-
 def missing_media(items: Sequence[Item]) -> list[Path]:
-    """Every expected image and audio file that is absent or empty."""
-    missing: list[Path] = []
-    for item_number, item in enumerate(items, start=1):
-        candidate = audio_path(item_number)
-        if _unusable(candidate):
-            missing.append(candidate)
-        for prompt_number in range(1, len(item.image_prompts) + 1):
-            candidate = image_path(item_number, prompt_number)
-            if _unusable(candidate):
-                missing.append(candidate)
-    return missing
+    """Every narration file that is absent or empty.
+
+    Images are not required: an item whose images failed still plays, with
+    the images it has or a placeholder. Without narration it cannot.
+    """
+    return [
+        audio_path(item_number)
+        for item_number in range(1, len(items) + 1)
+        if not usable(audio_path(item_number))
+    ]
 
 
 def missing_titled_images(items: Sequence[Item]) -> list[Path]:
-    """Every expected titled image that is absent or empty."""
+    """Every titled frame the video will play that is absent or empty."""
     missing: list[Path] = []
     for item_number, item in enumerate(items, start=1):
-        for prompt_number in range(1, len(item.image_prompts) + 1):
-            candidate = titled_image_path(item_number, prompt_number)
-            if _unusable(candidate):
+        for candidate in item_frame_paths(item_number, len(item.image_prompts)):
+            if not usable(candidate):
                 missing.append(candidate)
     return missing
+
+
+def _log_image_gaps(items: Sequence[Item], log: Log) -> None:
+    for item_number, item in enumerate(items, start=1):
+        expected = len(item.image_prompts)
+        made = len(available_prompt_numbers(item_number, expected))
+        if made == 0:
+            log(f"  Item {item_number} ({item.title}) has no images; "
+                f"it will show a question mark.")
+        elif made < expected:
+            log(f"  Item {item_number} ({item.title}) will show {made} of "
+                f"{expected} images.")
 
 
 def _fail(stage: str, paths: Sequence[Path]) -> None:
@@ -86,8 +94,14 @@ def media_job_total(items: Sequence[Item]) -> int:
 
 
 def titled_job_total(items: Sequence[Item]) -> int:
-    """One titled frame per generated image."""
-    return sum(len(item.image_prompts) for item in items)
+    """One titled frame per generated image, or one placeholder per item.
+
+    Reads the images on disk, so call it after the media stage.
+    """
+    return sum(
+        len(item_frame_paths(item_number, len(item.image_prompts)))
+        for item_number, item in enumerate(items, start=1)
+    )
 
 
 def generate_items_stage(
@@ -114,8 +128,15 @@ def generate_media_stage(
     log: Log = print,
     on_asset: AssetCallback | None = None,
 ) -> None:
-    """Stage 2: generate every image and narration, then verify all of them."""
+    """Stage 2: generate every image and narration.
+
+    A failed image is logged, not fatal. A missing narration stops the run.
+    Clears the previous run's images and narration first, so leftovers can
+    neither stand in for a failed asset nor end up in this run's archive.
+    """
     ensure_output_dirs()
+    clear_dir(IMAGE_OUTPUT_DIR)
+    clear_dir(AUDIO_OUTPUT_DIR)
     total = media_job_total(items)
     log(
         f"Generating {total} media assets "
@@ -129,6 +150,7 @@ def generate_media_stage(
     failures = describe_failures(results)
     if failures:
         log(failures)
+    _log_image_gaps(items, log)
 
     missing = missing_media(items)
     if missing:
@@ -143,6 +165,8 @@ def render_titled_images_stage(
 ) -> None:
     """Stage 3: compose each image onto a blurred backdrop with its title."""
     log("Rendering titled images...")
+    # Leftover frames from a previous run would otherwise be archived.
+    clear_dir(TITLED_IMAGE_OUTPUT_DIR)
     results = create_titled_images_for_items_short(items, on_done=on_asset)
 
     failures = describe_failures(results)

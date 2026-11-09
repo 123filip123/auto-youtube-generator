@@ -11,6 +11,13 @@ from utils.paths import image_path
 from .utils import generate_image
 
 
+def _generate_fresh(prompt: str, destination, client):
+    # outputs/ is reused between runs. Clear the old file first, so if this
+    # image fails, the previous run's picture cannot stand in for it.
+    destination.unlink(missing_ok=True)
+    return generate_image(prompt, destination, client=client)
+
+
 def image_jobs(items: Sequence[Item], *, client=None) -> list[Job]:
     """Build one labelled, not-yet-run job per (item, prompt) pair.
 
@@ -25,7 +32,7 @@ def image_jobs(items: Sequence[Item], *, client=None) -> list[Job]:
             jobs.append(
                 (
                     label,
-                    lambda p=prompt, d=destination: generate_image(p, d, client=client),
+                    lambda p=prompt, d=destination: _generate_fresh(p, d, client),
                 )
             )
     return jobs

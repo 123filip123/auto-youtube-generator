@@ -1,6 +1,7 @@
 """Assemble titled images and narration into per-item video clips."""
 
 from pathlib import Path
+from typing import Sequence
 
 import numpy as np
 from moviepy.editor import (
@@ -13,7 +14,7 @@ from moviepy.editor import (
 from PIL import Image
 
 import config
-from utils.paths import audio_path, titled_image_path
+from utils.paths import audio_path
 
 
 def zoom_scale(t: float, segment_duration: float, end_scale: float) -> float:
@@ -80,18 +81,14 @@ def build_item_audio(item_number: int) -> tuple[CompositeAudioClip, float]:
     return padded, total_duration
 
 
-def build_item_clip(item_number: int, image_count: int):
-    """One item: its images in sequence, over its narration."""
+def build_item_clip(item_number: int, frame_paths: Sequence[Path]):
+    """One item: its titled frames in sequence, over its narration."""
     audio, total_duration = build_item_audio(item_number)
 
     layers = [build_background_clip(total_duration)]
-    for prompt_number, (start, duration) in enumerate(
-        segment_bounds(total_duration, image_count), start=1
+    for frame_path, (start, duration) in zip(
+        frame_paths, segment_bounds(total_duration, len(frame_paths))
     ):
-        layers.append(
-            build_image_clip(
-                titled_image_path(item_number, prompt_number), duration, start
-            )
-        )
+        layers.append(build_image_clip(frame_path, duration, start))
 
     return CompositeVideoClip(layers).set_duration(total_duration).set_audio(audio)
