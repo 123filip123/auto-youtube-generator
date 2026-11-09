@@ -51,7 +51,7 @@ TTS_INSTRUCTIONS = (
     "YouTube video. Use a professional, conversational style."
 )
 
-IMAGE_MODEL = _env_str("IMAGE_MODEL", "gpt-image-1")
+IMAGE_MODEL = _env_str("IMAGE_MODEL", "gpt-image-1-mini")
 IMAGE_SIZE = _env_str("IMAGE_SIZE", "1024x1024")
 IMAGE_QUALITY = _env_str("IMAGE_QUALITY", "medium")
 

@@ -54,7 +54,7 @@ def restore_config():
 
 def test_default_image_models_are_the_cheap_ones():
     module = importlib.reload(config)
-    assert module.IMAGE_MODEL == "gpt-image-1"
+    assert module.IMAGE_MODEL == "gpt-image-1-mini"
     assert module.IMAGE_SIZE == "1024x1024"
     assert module.IMAGE_QUALITY == "medium"
 
