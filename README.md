@@ -10,12 +10,32 @@ This project automatically generates YouTube Shorts-style videos based on a topi
    JSON-schema structured outputs.
 2. Generate every image and voiceover in parallel, capped at
    `MAX_CONCURRENT_REQUESTS` concurrent API calls.
-3. Verify every expected asset exists before continuing.
+3. Verify every narration exists before continuing. Images may be missing; see
+   [When an image fails](#when-an-image-fails).
 4. Compose each image onto a blurred 1080x1920 backdrop with its title.
 5. Assemble the titled images and narration into a vertical video with a slow
    zoom on each image.
 6. Archive the run — list, audio, images, titled images and the finished video
    — into `generated_data/<topic-slug>/`.
+
+### When an image fails
+
+OpenAI's safety system sometimes rejects an image, often because the prompt
+describes a real artwork, album cover or person closely enough to recreate it.
+The pipeline handles that in two steps:
+
+1. **One rewrite.** When the image API answers `moderation_blocked`, the text
+   model rewrites that prompt to keep its subject and drop the likely cause,
+   and the image is requested once more. A second rejection fails that image.
+   The rewritten prompt is used only for that image; the saved item list keeps
+   the original.
+2. **The video is made anyway.** An item plays the images it has, splitting
+   its narration evenly between them. An item with no images at all shows a
+   grey question-mark frame with its title. The log names every item that lost
+   images.
+
+A missing narration still stops the run, because the item cannot play without
+it.
 
 ---
 
@@ -76,11 +96,11 @@ variable of the same name (see `.env.example`). The ones worth knowing:
 | Variable | Default | What it does |
 |---|---|---|
 | `MAX_CONCURRENT_REQUESTS` | `4` | Parallel OpenAI calls. Lower it if you hit rate limits. |
-| `MAX_RETRIES` | `5` | Attempts per call before giving up. Rate limits and 5xx are retried with exponential backoff; content-policy rejections are not. |
+| `MAX_RETRIES` | `5` | Attempts per call before giving up. Rate limits and 5xx are retried with exponential backoff. Other 400 errors are not retried; a blocked image prompt gets one rewrite instead (see [When an image fails](#when-an-image-fails)). |
 | `TEXT_MODEL` | `gpt-4.1-mini` | Generates the item list. Must support JSON schema structured outputs. |
 | `TTS_MODEL` | `gpt-4o-mini-tts` | Narration. Must support the `instructions` parameter. |
 | `TTS_VOICE` | `ash` | Narration voice. |
-| `IMAGE_MODEL` | `gpt-image-1` | Image generation. |
+| `IMAGE_MODEL` | `gpt-image-1-mini` | Image generation. |
 | `IMAGE_QUALITY` | `medium` | `low` is cheaper and faster; `high` is slower and costs more. |
 | `VIDEO_PRESET` | `medium` | x264 preset. `ultrafast` renders quicker at a larger file size. |
 
@@ -141,7 +161,7 @@ The UI can:
 #### Production models
 
 The defaults are the cheap models, for iterating: `gpt-4.1-mini` writes the
-list, `gpt-image-1` at `medium` quality draws the images and
+list, `gpt-image-1-mini` at `medium` quality draws the images and
 `gpt-4o-mini-tts` narrates. Ticking **Production models** generates that run's
 images with `gpt-image-2` at `high` quality instead. It is slower and costs
 more, and it changes image generation only.
@@ -159,6 +179,10 @@ already in flight — an OpenAI batch or a video render — finishes first.
 Run history lives in memory. Restarting the backend clears it —
 `generated_data/` is the durable record.
 
+The backend reads `config.py` and the rest of the code once, at startup. After
+changing either, restart it, or run it with `uvicorn api.app:app --port 8000
+--reload` while developing so it restarts on every change.
+
 To serve the UI from the backend alone (no Vite process), build it first; the
 backend serves `frontend/dist/` at `/` when that directory exists:
 
@@ -172,6 +196,12 @@ cd frontend && npm run build
 
 - Generated data (JSON, images, audio, video) will be saved in the `outputs/` and `generated_data/` directories.
 - The final video will be in `outputs/video_output/`.
+- `outputs/` holds only the latest run. The image and audio folders are emptied
+  when media generation starts, and the titled-image folder when titled images
+  are rendered, so nothing from an earlier run can stand in for a failed asset
+  or end up in this run's archive.
+- Two runs on the same topic archive to the same `generated_data/<topic-slug>/`
+  folder. Files the newer run doesn't overwrite stay there.
 
 ---
 
@@ -186,7 +216,9 @@ cd frontend && npm run build
 ## Notes
 
 - Make sure your OpenAI account has access to the models listed under
-  [Configuration](#configuration) (text, TTS, and image generation).
+  [Configuration](#configuration) (text, TTS, and image generation). OpenAI
+  retires models over time; an error like "The model 'gpt-image-1' does not
+  exist" means you need to set a model your account still has.
 - If you hit rate limits, lower `MAX_CONCURRENT_REQUESTS`. Transient failures are
   already retried automatically with exponential backoff.
 - For best results, use a topic that is suitable for list-style videos (e.g., "Amazing Space Facts").
