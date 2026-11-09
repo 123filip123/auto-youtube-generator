@@ -132,3 +132,93 @@ def test_jobs_run_correctly_through_the_shared_runner(tmp_path, monkeypatch):
     with ThreadPoolExecutor(max_workers=4) as executor:
         results = run_all(executor, image_jobs(two_items(), client=client))
     assert all(r.ok for r in results)
+
+
+try:  # openai >= 3 vendors httpx2; older releases use httpx.
+    import httpx2 as httpx
+except ImportError:  # pragma: no cover - depends on the installed openai
+    import httpx
+
+import openai
+
+
+def bad_request(code):
+    request = httpx.Request("POST", "https://api.openai.com/v1/images/generations")
+    response = httpx.Response(400, request=request)
+    body = {"message": "rejected", "type": "image_generation_user_error", "code": code}
+    return openai.BadRequestError("rejected", response=response, body=body)
+
+
+class FakeChat:
+    def __init__(self, reply):
+        self.reply = reply
+        self.calls = []
+
+    def create(self, **kwargs):
+        self.calls.append(kwargs)
+        message = SimpleNamespace(content=self.reply)
+        return SimpleNamespace(choices=[SimpleNamespace(message=message)])
+
+
+class ScriptedImages:
+    """Raise or succeed in the order given, one outcome per call."""
+
+    def __init__(self, outcomes):
+        self.outcomes = list(outcomes)
+        self.calls = []
+
+    def generate(self, **kwargs):
+        self.calls.append(kwargs)
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return SimpleNamespace(data=[SimpleNamespace(b64_json=outcome)])
+
+
+def scripted_client(outcomes, rewrite="a rewritten prompt"):
+    images = ScriptedImages(outcomes)
+    chat = FakeChat(rewrite)
+    client = SimpleNamespace(
+        images=images, chat=SimpleNamespace(completions=chat)
+    )
+    return client, images, chat
+
+
+GOOD_B64 = base64.b64encode(PNG_BYTES).decode()
+
+
+def test_a_moderation_block_retries_once_with_a_rewritten_prompt(tmp_path):
+    client, images, _ = scripted_client(
+        [bad_request("moderation_blocked"), GOOD_B64], rewrite="a neon dance floor"
+    )
+    destination = tmp_path / "out.png"
+    generate_image("an iconic album cover", destination, client=client)
+    assert [c["prompt"] for c in images.calls] == [
+        "an iconic album cover",
+        "a neon dance floor",
+    ]
+    assert destination.read_bytes() == PNG_BYTES
+
+
+def test_the_rewrite_request_shows_the_model_the_blocked_prompt(tmp_path):
+    client, _, chat = scripted_client([bad_request("moderation_blocked"), GOOD_B64])
+    generate_image("an iconic album cover", tmp_path / "out.png", client=client)
+    sent = " ".join(m["content"] for m in chat.calls[0]["messages"])
+    assert "an iconic album cover" in sent
+
+
+def test_a_second_moderation_block_raises_without_a_third_try(tmp_path):
+    client, images, _ = scripted_client(
+        [bad_request("moderation_blocked"), bad_request("moderation_blocked")]
+    )
+    with pytest.raises(openai.BadRequestError):
+        generate_image("an iconic album cover", tmp_path / "out.png", client=client)
+    assert len(images.calls) == 2
+
+
+def test_other_bad_requests_are_not_rewritten(tmp_path):
+    client, images, chat = scripted_client([bad_request("invalid_size")])
+    with pytest.raises(openai.BadRequestError):
+        generate_image("a dodo", tmp_path / "out.png", client=client)
+    assert len(images.calls) == 1
+    assert chat.calls == []
